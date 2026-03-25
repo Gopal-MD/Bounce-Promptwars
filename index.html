@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="description" content="Bounce Classic: Physics Rewritten — A futuristic AI-powered platformer where forces bend, levels generate dynamically, and every bounce tells a story.">
+    <title>Bounce Classic: Physics Rewritten (AI Edition)</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪐</text></svg>">
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Header -->
+        <header class="game-header">
+            <h1 class="game-title">Bounce Classic</h1>
+            <p class="game-subtitle">Physics Rewritten · AI Edition</p>
+        </header>
+
+        <!-- Canvas Wrapper -->
+        <div class="canvas-wrapper">
+            <canvas id="gameCanvas" width="800" height="580"></canvas>
+
+            <!-- ═══ Title Screen ═══ -->
+            <div id="screen-title" class="screen-overlay active">
+                <div class="title-logo">BOUNCE CLASSIC</div>
+                <p class="title-tagline">Physics Rewritten · AI Edition</p>
+                <div class="feature-list">
+                    <span class="feature-tag cyan">Classic Physics</span>
+                    <span class="feature-tag purple">AI Levels</span>
+                    <span class="feature-tag pink">Dynamic Story</span>
+                    <span class="feature-tag orange">AI Narration</span>
+                    <span class="feature-tag green">Classic Bounce</span>
+                </div>
+                <button id="btn-start" class="btn-primary">Launch Game</button>
+            </div>
+
+            <!-- ═══ Loading Screen ═══ -->
+            <div id="screen-loading" class="screen-overlay">
+                <div class="loader-ring"></div>
+                <div id="loading-text">Generating Level...</div>
+                <div id="loading-sub">Bending force fields...</div>
+            </div>
+
+            <!-- ═══ Story Screen ═══ -->
+            <div id="screen-story" class="screen-overlay">
+                <span class="story-level-label">— Level Briefing —</span>
+                <h2 id="story-level-name"></h2>
+                <p id="story-text"></p>
+                <div class="story-meta">
+                    <span id="story-difficulty" class="difficulty-badge diff-medium"></span>
+                </div>
+                <p id="story-adaptive-msg" class="adaptive-notice"></p>
+                <button id="btn-story-continue" class="btn-primary" style="margin-top: 16px;">Enter Level</button>
+            </div>
+
+            <!-- ═══ Gameplay Screen (transparent — just enables HUD) ═══ -->
+            <div id="screen-gameplay" class="screen-overlay" style="background: transparent; backdrop-filter: none; pointer-events: none;">
+                <button id="btn-hint" class="hint-btn">💡 Get Hint</button>
+                <div id="hint-toast" class="hint-toast hidden"></div>
+            </div>
+
+            <!-- ═══ Level Complete Screen ═══ -->
+            <div id="screen-level-complete" class="screen-overlay">
+                <div class="lc-star">⭐</div>
+                <h2 id="lc-level">Level Complete!</h2>
+                <p id="lc-score">Score: 0</p>
+                <button id="btn-next-level" class="btn-primary">Next Level</button>
+            </div>
+
+            <!-- ═══ Game Over Screen ═══ -->
+            <div id="screen-game-over" class="screen-overlay">
+                <div class="go-icon">💀</div>
+                <h2 class="go-title">Game Over</h2>
+                <p id="go-score">Final Score: 0</p>
+                <button id="btn-restart" class="btn-primary">Try Again</button>
+            </div>
+
+            <!-- ═══ Ending Screen ═══ -->
+            <div id="screen-ending" class="screen-overlay">
+                <div class="ending-icon">🌌</div>
+                <h2 class="ending-title">You Escaped the Fracture</h2>
+                <p id="ending-text"></p>
+                <p id="ending-score"></p>
+                <button id="btn-play-again" class="btn-primary" style="margin-top: 10px;">Play Again</button>
+            </div>
+        </div>
+
+        <!-- HUD Bar -->
+        <div class="hud-bar" id="hud-bar">
+            <div class="hud-section">
+                <span class="hud-label">Lives</span>
+                <span id="hud-lives" class="hud-value">♥♥♥♥♥</span>
+            </div>
+            <div class="hud-section">
+                <span class="hud-label">Score</span>
+                <span id="hud-score" class="hud-value">0</span>
+            </div>
+            <div class="hud-section">
+                <span class="hud-label">Level</span>
+                <span id="hud-level" class="hud-value">1/10</span>
+            </div>
+        </div>
+
+        <!-- Touch Controls (mobile) -->
+        <div class="touch-controls">
+            <div class="touch-btn-group">
+                <button id="btn-left" class="touch-btn" aria-label="Move Left">◀</button>
+                <button id="btn-right" class="touch-btn" aria-label="Move Right">▶</button>
+            </div>
+            <button id="btn-jump" class="touch-btn jump-btn" aria-label="Jump">▲</button>
+        </div>
+
+        <!-- Controls Info (desktop) -->
+        <div class="controls-info">
+            <kbd>←</kbd> <kbd>→</kbd> Move &nbsp;·&nbsp; <kbd>↑</kbd> / <kbd>Space</kbd> Jump
+        </div>
+
+
+
+        <!-- Footer -->
+        <footer class="game-footer">
+            Powered by Gemini AI · Canvas 2D Physics
+        </footer>
+    </div>
+
+    <!-- Scripts (order matters) -->
+    <script src="playerStats.js"></script>
+    <script src="ai.js"></script>
+    <script src="ui.js"></script>
+    <script src="game.js"></script>
+    <script>
+        // Initialize when DOM is ready
+        window.addEventListener('DOMContentLoaded', () => {
+            window.Game.initGame();
+        });
+    </script>
+</body>
+</html>

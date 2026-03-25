@@ -1,0 +1,21 @@
+{
+  "name": "bounce-classic-2026",
+  "version": "1.0.0",
+  "description": "Bounce Classic 2026 - AI-powered Nokia Bounce game remake with Gemini integration",
+  "main": "index.html",
+  "scripts": {
+    "start": "echo 'Open index.html in your browser'"
+  },
+  "keywords": [
+    "game",
+    "bounce",
+    "ai",
+    "gemini",
+    "platformer"
+  ],
+  "author": "You",
+  "license": "MIT",
+  "engines": {
+    "node": "18.x"
+  }
+}
