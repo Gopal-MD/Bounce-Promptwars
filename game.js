@@ -88,12 +88,24 @@ function getGravityVector() {
     }
 }
 
+let gravityRevertTimer = null;
+
 function switchGravity(type) {
     if (currentGravity === type) return;
     currentGravity = type;
     gravityTransitionTimer = 30;
     triggerNarration('gravity_shift');
     UI.updateGravityIndicator(type);
+
+    // Auto-revert to normal gravity after 5 seconds
+    clearTimeout(gravityRevertTimer);
+    if (type !== GravityTypes.NORMAL) {
+        gravityRevertTimer = setTimeout(() => {
+            if (state === GameState.PLAYING && currentGravity !== GravityTypes.NORMAL) {
+                switchGravity(GravityTypes.NORMAL);
+            }
+        }, 5000); // 5 second duration for altered gravity
+    }
 }
 
 // ── Tension System ─────────────────────────────────────────
@@ -213,6 +225,8 @@ function loadLevel(data) {
     if (window.Renderer3D) {
         Renderer3D.buildLevel(platforms, obstacles, goal);
     }
+    
+    clearTimeout(gravityRevertTimer);
 }
 
 // ── Update Moving Platforms/Obstacles ───────────────────────
@@ -288,7 +302,7 @@ function updateBall() {
 
     // Floor / ceiling
     if (ball.y + ball.radius > H) { killBall(); return; }
-    if (ball.y - ball.radius < 0) { ball.y = ball.radius; ball.vy *= -0.5; }
+    if (ball.y < 0) { killBall(); return; } // Death if ball flies off the top ceiling
 
     // Platform collision
     const wasInAir = !ball.onGround;
@@ -464,11 +478,10 @@ function updateGravityShifts() {
         gravityShiftTimer = 0;
         if (tension > 50 && gravityZones.length === 0) {
             // High tension → random gravity shift
-            const types = Object.values(GravityTypes);
+            const types = Object.values(GravityTypes).filter(t => t !== GravityTypes.NORMAL);
             const pick = types[Math.floor(Math.random() * types.length)];
             switchGravity(pick);
-            // Revert after a few seconds
-            setTimeout(() => switchGravity(GravityTypes.NORMAL), 4000);
+            // Will auto-revert thanks to the logic in switchGravity()
         }
     }
 }
