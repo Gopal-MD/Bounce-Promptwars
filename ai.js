@@ -1,280 +1,251 @@
 // ============================================================
-// AI.JS — Gemini API Integration for Bounce Classic
+// AI.JS — Gemini API Integration
+// Bounce Tales: Gravity Shift — Smart 3D AI Edition
 // ============================================================
 
-// API endpoint now routes through Vercel serverless function
+// API endpoint routes through Vercel serverless function
 // (API key is securely stored in environment variables)
 const GEMINI_ENDPOINT = '/api/generateContent';
 
-// ── Fallback Data ─────────────────────────────────────────────────────────────
-// 10 hand-crafted levels with progressive difficulty.
-// Physics constraints: jump height ≈110px, horizontal reach ≈180px.
-// Canvas play area: 800 × 580.  Platform height is always 20.
-const FALLBACK_LEVELS = [
+// ── Fallback Data ─────────────────────────────────────────
+// 10 hand-crafted levels with progressive difficulty & gravity zones.
 
-    // ═══════════════════════════════════════════════════════════
-    // LEVEL 1 — "First Steps"  (Easy)
-    // Simple staircase going right then left.  No moving parts.
-    // ═══════════════════════════════════════════════════════════
+const FALLBACK_LEVELS = [
+    // Level 1: First Steps (Easy)
     {
         name: "First Steps",
         difficulty: "easy",
         platforms: [
-            { x: 0,   y: 540, w: 260, h: 20, type: "static" },   // spawn
-            { x: 220, y: 460, w: 180, h: 20, type: "static" },
-            { x: 440, y: 390, w: 160, h: 20, type: "static" },
-            { x: 300, y: 310, w: 160, h: 20, type: "static" },
-            { x: 500, y: 240, w: 180, h: 20, type: "static" },
-            { x: 350, y: 170, w: 180, h: 20, type: "static" }    // goal
+            { x: 20, y: 540, w: 200, h: 20, type: "static" },
+            { x: 280, y: 480, w: 180, h: 20, type: "static" },
+            { x: 520, y: 420, w: 160, h: 20, type: "static" },
+            { x: 350, y: 350, w: 180, h: 20, type: "static" },
+            { x: 550, y: 280, w: 200, h: 20, type: "static" }
         ],
         obstacles: [
-            { x: 240, y: 520, w: 20, h: 20, type: "spike" },
-            { x: 430, y: 370, w: 20, h: 20, type: "spike" }
+            { x: 360, y: 460, w: 18, h: 18, type: "spike" }
         ],
-        goal: { x: 410, y: 130, w: 40, h: 40 }
+        goal: { x: 620, y: 240, w: 40, h: 40 },
+        gravityZones: []
     },
-
-    // ═══════════════════════════════════════════════════════════
-    // LEVEL 2 — "Stepping Stones"  (Easy)
-    // Longer path, introduces first moving platform.
-    // ═══════════════════════════════════════════════════════════
+    // Level 2: The Climb (Easy)
     {
-        name: "Stepping Stones",
+        name: "The Climb",
         difficulty: "easy",
         platforms: [
-            { x: 0,   y: 540, w: 200, h: 20, type: "static" },
-            { x: 250, y: 480, w: 120, h: 20, type: "static" },
-            { x: 420, y: 420, w: 120, h: 20, type: "static" },
-            { x: 280, y: 350, w: 140, h: 20, type: "static" },
-            { x: 480, y: 280, w: 140, h: 20, type: "static" },
-            { x: 300, y: 200, w: 140, h: 20, type: "moving", moveX: 60, speed: 1.2 },
-            { x: 550, y: 130, w: 180, h: 20, type: "static" }
+            { x: 30, y: 540, w: 180, h: 20, type: "static" },
+            { x: 250, y: 460, w: 150, h: 20, type: "static" },
+            { x: 100, y: 380, w: 160, h: 20, type: "static" },
+            { x: 320, y: 300, w: 180, h: 20, type: "static" },
+            { x: 150, y: 220, w: 160, h: 20, type: "static" },
+            { x: 400, y: 150, w: 180, h: 20, type: "static" }
         ],
         obstacles: [
-            { x: 360, y: 400, w: 20, h: 20, type: "spike" },
-            { x: 460, y: 260, w: 20, h: 20, type: "spike" }
+            { x: 310, y: 440, w: 18, h: 18, type: "spike" },
+            { x: 180, y: 360, w: 18, h: 18, type: "spike" }
         ],
-        goal: { x: 610, y: 90, w: 40, h: 40 }
+        goal: { x: 460, y: 110, w: 40, h: 40 },
+        gravityZones: []
     },
-
-    // ═══════════════════════════════════════════════════════════
-    // LEVEL 3 — "Broken Bridge"  (Easy → Medium)
-    // Gaps widen, first moving-block obstacle.
-    // ═══════════════════════════════════════════════════════════
+    // Level 3: Gravity Intro (Easy)
     {
-        name: "Broken Bridge",
+        name: "Gravity Intro",
         difficulty: "easy",
         platforms: [
-            { x: 0,   y: 540, w: 180, h: 20, type: "static" },
-            { x: 230, y: 490, w: 120, h: 20, type: "static" },
-            { x: 400, y: 430, w: 120, h: 20, type: "moving", moveX: 50, speed: 1.3 },
-            { x: 570, y: 370, w: 150, h: 20, type: "static" },
-            { x: 380, y: 300, w: 130, h: 20, type: "static" },
-            { x: 160, y: 230, w: 160, h: 20, type: "static" },
-            { x: 380, y: 160, w: 140, h: 20, type: "static" },
-            { x: 580, y: 90,  w: 160, h: 20, type: "static" }
+            { x: 20, y: 540, w: 200, h: 20, type: "static" },
+            { x: 300, y: 480, w: 160, h: 20, type: "static" },
+            { x: 520, y: 400, w: 180, h: 20, type: "static" },
+            { x: 300, y: 300, w: 160, h: 20, type: "static" },
+            { x: 100, y: 220, w: 200, h: 20, type: "static" },
+            { x: 400, y: 140, w: 180, h: 20, type: "static" }
         ],
         obstacles: [
-            { x: 160, y: 520, w: 20, h: 20, type: "spike" },
-            { x: 550, y: 350, w: 20, h: 20, type: "spike" },
-            { x: 310, y: 280, w: 25, h: 25, type: "moving_block", moveY: 40, speed: 1.0 }
+            { x: 380, y: 460, w: 18, h: 18, type: "spike" }
         ],
-        goal: { x: 630, y: 50, w: 40, h: 40 }
+        goal: { x: 450, y: 100, w: 40, h: 40 },
+        gravityZones: [
+            { x: 280, y: 260, w: 100, h: 80, type: "zero" }
+        ]
     },
-
-    // ═══════════════════════════════════════════════════════════
-    // LEVEL 4 — "Tower Climb"  (Medium)
-    // Zigzag vertical climb.
-    // ═══════════════════════════════════════════════════════════
+    // Level 4: Moving Bridges (Medium)
     {
-        name: "Tower Climb",
+        name: "Moving Bridges",
         difficulty: "medium",
         platforms: [
-            { x: 50,  y: 540, w: 200, h: 20, type: "static" },
-            { x: 300, y: 470, w: 120, h: 20, type: "static" },
-            { x: 100, y: 400, w: 140, h: 20, type: "static" },
-            { x: 320, y: 330, w: 120, h: 20, type: "moving", moveX: 60, speed: 1.4 },
-            { x: 130, y: 260, w: 130, h: 20, type: "static" },
-            { x: 350, y: 190, w: 140, h: 20, type: "static" },
-            { x: 150, y: 120, w: 160, h: 20, type: "static" },
-            { x: 400, y: 60,  w: 160, h: 20, type: "static" }
+            { x: 20, y: 540, w: 160, h: 20, type: "static" },
+            { x: 260, y: 470, w: 140, h: 20, type: "moving", moveX: 60, speed: 1.2 },
+            { x: 480, y: 400, w: 150, h: 20, type: "static" },
+            { x: 280, y: 320, w: 140, h: 20, type: "moving", moveY: 40, speed: 0.8 },
+            { x: 100, y: 250, w: 160, h: 20, type: "static" },
+            { x: 400, y: 170, w: 180, h: 20, type: "static" }
         ],
         obstacles: [
-            { x: 230, y: 520, w: 20, h: 20, type: "spike" },
-            { x: 220, y: 380, w: 20, h: 20, type: "spike" },
-            { x: 250, y: 240, w: 20, h: 20, type: "spike" },
-            { x: 300, y: 170, w: 25, h: 25, type: "moving_block", moveY: 45, speed: 1.4 }
+            { x: 540, y: 380, w: 18, h: 18, type: "spike" },
+            { x: 160, y: 230, w: 18, h: 18, type: "spike" }
         ],
-        goal: { x: 450, y: 20, w: 40, h: 40 }
+        goal: { x: 460, y: 130, w: 40, h: 40 },
+        gravityZones: []
     },
-
-    // ═══════════════════════════════════════════════════════════
-    // LEVEL 5 — "Zigzag Dash"  (Medium)
-    // Fast left-right pattern with more spikes.
-    // ═══════════════════════════════════════════════════════════
+    // Level 5: Reverse World (Medium)
     {
-        name: "Zigzag Dash",
+        name: "Reverse World",
         difficulty: "medium",
         platforms: [
-            { x: 0,   y: 540, w: 160, h: 20, type: "static" },
-            { x: 200, y: 480, w: 120, h: 20, type: "static" },
-            { x: 400, y: 420, w: 140, h: 20, type: "static" },
-            { x: 600, y: 360, w: 140, h: 20, type: "static" },
-            { x: 380, y: 290, w: 120, h: 20, type: "moving", moveX: 50, speed: 1.5 },
-            { x: 160, y: 220, w: 140, h: 20, type: "static" },
-            { x: 400, y: 150, w: 130, h: 20, type: "static" },
-            { x: 600, y: 80,  w: 160, h: 20, type: "static" }
+            { x: 20, y: 540, w: 180, h: 20, type: "static" },
+            { x: 280, y: 460, w: 160, h: 20, type: "static" },
+            { x: 500, y: 380, w: 150, h: 20, type: "static" },
+            { x: 300, y: 280, w: 180, h: 20, type: "static" },
+            { x: 80, y: 200, w: 160, h: 20, type: "static" },
+            { x: 350, y: 120, w: 180, h: 20, type: "static" },
+            { x: 600, y: 520, w: 100, h: 20, type: "static" }
         ],
         obstacles: [
-            { x: 140, y: 520, w: 20, h: 20, type: "spike" },
-            { x: 380, y: 400, w: 20, h: 20, type: "spike" },
-            { x: 580, y: 340, w: 20, h: 20, type: "spike" },
-            { x: 300, y: 200, w: 25, h: 25, type: "moving_block", moveY: 35, speed: 1.3 }
+            { x: 360, y: 440, w: 18, h: 18, type: "spike" },
+            { x: 560, y: 360, w: 18, h: 18, type: "spike" },
+            { x: 140, y: 180, w: 18, h: 18, type: "spike" }
         ],
-        goal: { x: 650, y: 40, w: 40, h: 40 }
+        goal: { x: 400, y: 80, w: 40, h: 40 },
+        gravityZones: [
+            { x: 450, y: 320, w: 120, h: 100, type: "reverse" },
+            { x: 60, y: 140, w: 100, h: 80, type: "zero" }
+        ]
     },
-
-    // ═══════════════════════════════════════════════════════════
-    // LEVEL 6 — "Floating Islands"  (Medium)
-    // Scattered platforms, two movers.
-    // ═══════════════════════════════════════════════════════════
+    // Level 6: Lateral Shift (Medium)
     {
-        name: "Floating Islands",
+        name: "Lateral Shift",
         difficulty: "medium",
         platforms: [
-            { x: 0,   y: 540, w: 180, h: 20, type: "static" },
-            { x: 220, y: 460, w: 110, h: 20, type: "moving", moveX: 40, speed: 1.3 },
-            { x: 420, y: 400, w: 120, h: 20, type: "static" },
-            { x: 250, y: 330, w: 110, h: 20, type: "static" },
-            { x: 480, y: 260, w: 130, h: 20, type: "moving", moveX: 55, speed: 1.5 },
-            { x: 280, y: 190, w: 120, h: 20, type: "static" },
-            { x: 100, y: 120, w: 160, h: 20, type: "static" },
-            { x: 350, y: 60,  w: 160, h: 20, type: "static" }
+            { x: 20, y: 540, w: 160, h: 20, type: "static" },
+            { x: 300, y: 500, w: 120, h: 20, type: "moving", moveX: 80, speed: 1.0 },
+            { x: 550, y: 440, w: 150, h: 20, type: "static" },
+            { x: 350, y: 350, w: 140, h: 20, type: "static" },
+            { x: 100, y: 280, w: 180, h: 20, type: "static" },
+            { x: 400, y: 200, w: 160, h: 20, type: "moving", moveY: 50, speed: 1.2 },
+            { x: 600, y: 130, w: 140, h: 20, type: "static" }
         ],
         obstacles: [
-            { x: 160, y: 520, w: 20, h: 20, type: "spike" },
-            { x: 400, y: 380, w: 20, h: 20, type: "spike" },
-            { x: 230, y: 310, w: 20, h: 20, type: "spike" },
-            { x: 370, y: 170, w: 25, h: 25, type: "moving_block", moveY: 45, speed: 1.4 },
-            { x: 80,  y: 100, w: 20, h: 20, type: "spike" }
+            { x: 610, y: 420, w: 18, h: 18, type: "spike" },
+            { x: 420, y: 330, w: 18, h: 18, type: "spike" },
+            { x: 180, y: 260, w: 18, h: 18, type: "spike" }
         ],
-        goal: { x: 400, y: 20, w: 40, h: 40 }
+        goal: { x: 640, y: 90, w: 40, h: 40 },
+        gravityZones: [
+            { x: 300, y: 300, w: 100, h: 80, type: "left" }
+        ]
     },
-
-    // ═══════════════════════════════════════════════════════════
-    // LEVEL 7 — "The Gauntlet"  (Medium → Hard)
-    // Tight jumps, narrower platforms, more obstacles.
-    // ═══════════════════════════════════════════════════════════
+    // Level 7: Pulse Canyon (Hard)
     {
-        name: "The Gauntlet",
+        name: "Pulse Canyon",
         difficulty: "hard",
         platforms: [
-            { x: 0,   y: 540, w: 160, h: 20, type: "static" },
-            { x: 200, y: 470, w: 100, h: 20, type: "static" },
-            { x: 360, y: 410, w: 100, h: 20, type: "moving", moveX: 40, speed: 1.5 },
-            { x: 520, y: 350, w: 110, h: 20, type: "static" },
-            { x: 340, y: 280, w: 100, h: 20, type: "static" },
-            { x: 520, y: 210, w: 120, h: 20, type: "moving", moveX: 50, speed: 1.6 },
-            { x: 300, y: 140, w: 110, h: 20, type: "static" },
-            { x: 520, y: 70,  w: 160, h: 20, type: "static" }
+            { x: 20, y: 540, w: 140, h: 20, type: "static" },
+            { x: 220, y: 480, w: 120, h: 20, type: "moving", moveX: 50, speed: 1.5 },
+            { x: 420, y: 420, w: 130, h: 20, type: "static" },
+            { x: 600, y: 350, w: 120, h: 20, type: "moving", moveY: 40, speed: 1.0 },
+            { x: 380, y: 280, w: 140, h: 20, type: "static" },
+            { x: 150, y: 210, w: 130, h: 20, type: "moving", moveX: 60, speed: 1.3 },
+            { x: 400, y: 140, w: 160, h: 20, type: "static" },
+            { x: 620, y: 80, w: 140, h: 20, type: "static" }
         ],
         obstacles: [
-            { x: 140, y: 520, w: 20, h: 20, type: "spike" },
-            { x: 280, y: 450, w: 20, h: 20, type: "spike" },
-            { x: 500, y: 330, w: 20, h: 20, type: "spike" },
-            { x: 320, y: 260, w: 20, h: 20, type: "spike" },
-            { x: 430, y: 190, w: 25, h: 25, type: "moving_block", moveY: 40, speed: 1.7 }
+            { x: 480, y: 400, w: 18, h: 18, type: "spike" },
+            { x: 660, y: 330, w: 18, h: 18, type: "spike" },
+            { x: 210, y: 190, w: 18, h: 18, type: "spike" },
+            { x: 500, y: 120, w: 18, h: 18, type: "spike" }
         ],
-        goal: { x: 570, y: 30, w: 40, h: 40 }
+        goal: { x: 660, y: 40, w: 40, h: 40 },
+        gravityZones: [
+            { x: 350, y: 230, w: 100, h: 80, type: "pulse" },
+            { x: 560, y: 300, w: 100, h: 80, type: "reverse" }
+        ]
     },
-
-    // ═══════════════════════════════════════════════════════════
-    // LEVEL 8 — "Sky Fortress"  (Hard)
-    // Long path, small platforms, multiple movers.
-    // ═══════════════════════════════════════════════════════════
+    // Level 8: Zero Zone (Hard)
     {
-        name: "Sky Fortress",
+        name: "Zero Zone",
         difficulty: "hard",
         platforms: [
-            { x: 0,   y: 540, w: 150, h: 20, type: "static" },
-            { x: 190, y: 460, w: 100, h: 20, type: "static" },
-            { x: 340, y: 390, w: 100, h: 20, type: "moving", moveX: 45, speed: 1.6 },
-            { x: 520, y: 330, w: 100, h: 20, type: "static" },
-            { x: 350, y: 260, w: 100, h: 20, type: "static" },
-            { x: 150, y: 200, w: 110, h: 20, type: "moving", moveX: 50, speed: 1.5 },
-            { x: 370, y: 130, w: 110, h: 20, type: "static" },
-            { x: 570, y: 70,  w: 130, h: 20, type: "static" },
-            { x: 200, y: 60,  w: 140, h: 20, type: "static" }
+            { x: 20, y: 540, w: 140, h: 20, type: "static" },
+            { x: 240, y: 500, w: 110, h: 20, type: "moving", moveY: 30, speed: 1.2 },
+            { x: 420, y: 440, w: 120, h: 20, type: "static" },
+            { x: 600, y: 380, w: 110, h: 20, type: "moving", moveX: 40, speed: 1.0 },
+            { x: 350, y: 300, w: 130, h: 20, type: "static" },
+            { x: 100, y: 230, w: 120, h: 20, type: "moving", moveX: 50, speed: 1.5 },
+            { x: 300, y: 160, w: 140, h: 20, type: "static" },
+            { x: 550, y: 100, w: 150, h: 20, type: "static" }
         ],
         obstacles: [
-            { x: 130, y: 520, w: 20, h: 20, type: "spike" },
-            { x: 270, y: 440, w: 20, h: 20, type: "spike" },
-            { x: 500, y: 310, w: 20, h: 20, type: "spike" },
-            { x: 280, y: 240, w: 25, h: 25, type: "moving_block", moveY: 45, speed: 1.7 },
-            { x: 350, y: 110, w: 20, h: 20, type: "spike" },
-            { x: 530, y: 160, w: 30, h: 30, type: "moving_block", moveX: 35, speed: 1.9 }
+            { x: 480, y: 420, w: 18, h: 18, type: "spike" },
+            { x: 150, y: 210, w: 18, h: 18, type: "spike" },
+            { x: 380, y: 140, w: 18, h: 18, type: "spike" },
+            { x: 620, y: 80, w: 18, h: 18, type: "spike" }
         ],
-        goal: { x: 240, y: 20, w: 40, h: 40 }
+        goal: { x: 590, y: 60, w: 40, h: 40 },
+        gravityZones: [
+            { x: 300, y: 250, w: 120, h: 80, type: "zero" },
+            { x: 80, y: 180, w: 100, h: 80, type: "reverse" },
+            { x: 500, y: 340, w: 100, h: 70, type: "pulse" }
+        ]
     },
-
-    // ═══════════════════════════════════════════════════════════
-    // LEVEL 9 — "Chaos Canyon"  (Hard)
-    // Three moving platforms, six obstacles.
-    // ═══════════════════════════════════════════════════════════
+    // Level 9: Chaos Corridor (Hard)
     {
-        name: "Chaos Canyon",
+        name: "Chaos Corridor",
         difficulty: "hard",
         platforms: [
-            { x: 0,   y: 540, w: 140, h: 20, type: "static" },
-            { x: 180, y: 470, w: 100, h: 20, type: "moving", moveX: 40, speed: 1.5 },
-            { x: 370, y: 410, w: 100, h: 20, type: "static" },
-            { x: 540, y: 350, w: 100, h: 20, type: "moving", moveY: 35, speed: 1.4 },
-            { x: 360, y: 280, w: 100, h: 20, type: "static" },
-            { x: 160, y: 210, w: 110, h: 20, type: "static" },
-            { x: 370, y: 140, w: 100, h: 20, type: "moving", moveX: 45, speed: 1.6 },
-            { x: 570, y: 80,  w: 130, h: 20, type: "static" },
-            { x: 300, y: 60,  w: 140, h: 20, type: "static" }
+            { x: 20, y: 540, w: 130, h: 20, type: "static" },
+            { x: 200, y: 490, w: 100, h: 20, type: "moving", moveX: 60, speed: 1.8 },
+            { x: 400, y: 440, w: 110, h: 20, type: "static" },
+            { x: 580, y: 390, w: 100, h: 20, type: "moving", moveY: 50, speed: 1.2 },
+            { x: 380, y: 320, w: 120, h: 20, type: "moving", moveX: 40, speed: 1.5 },
+            { x: 150, y: 250, w: 110, h: 20, type: "static" },
+            { x: 350, y: 180, w: 130, h: 20, type: "moving", moveY: 30, speed: 1.0 },
+            { x: 550, y: 120, w: 100, h: 20, type: "static" },
+            { x: 680, y: 60, w: 100, h: 20, type: "static" }
         ],
         obstacles: [
-            { x: 120, y: 520, w: 20, h: 20, type: "spike" },
-            { x: 350, y: 390, w: 20, h: 20, type: "spike" },
-            { x: 340, y: 260, w: 20, h: 20, type: "spike" },
-            { x: 260, y: 190, w: 25, h: 25, type: "moving_block", moveY: 35, speed: 1.6 },
-            { x: 140, y: 190, w: 20, h: 20, type: "spike" },
-            { x: 550, y: 60,  w: 20, h: 20, type: "spike" }
+            { x: 450, y: 420, w: 18, h: 18, type: "spike" },
+            { x: 630, y: 370, w: 18, h: 18, type: "spike" },
+            { x: 200, y: 230, w: 18, h: 18, type: "spike" },
+            { x: 400, y: 160, w: 18, h: 18, type: "spike" },
+            { x: 600, y: 100, w: 18, h: 18, type: "spike" }
         ],
-        goal: { x: 340, y: 20, w: 40, h: 40 }
+        goal: { x: 700, y: 20, w: 40, h: 40 },
+        gravityZones: [
+            { x: 340, y: 270, w: 100, h: 80, type: "right" },
+            { x: 120, y: 200, w: 80, h: 80, type: "zero" },
+            { x: 500, y: 80, w: 100, h: 70, type: "reverse" }
+        ]
     },
-
-    // ═══════════════════════════════════════════════════════════
-    // LEVEL 10 — "Final Ascent"  (Hard)
-    // The ultimate challenge: narrow platforms, four movers,
-    // six obstacles, long winding path.
-    // ═══════════════════════════════════════════════════════════
+    // Level 10: The Final Ascent (Hard)
     {
-        name: "Final Ascent",
+        name: "The Final Ascent",
         difficulty: "hard",
         platforms: [
-            { x: 0,   y: 540, w: 140, h: 20, type: "static" },
-            { x: 170, y: 470, w: 90,  h: 20, type: "static" },
-            { x: 320, y: 410, w: 90,  h: 20, type: "moving", moveX: 40, speed: 1.6 },
-            { x: 500, y: 350, w: 100, h: 20, type: "static" },
-            { x: 320, y: 290, w: 90,  h: 20, type: "moving", moveY: 30, speed: 1.4 },
-            { x: 130, y: 230, w: 110, h: 20, type: "static" },
-            { x: 330, y: 160, w: 90,  h: 20, type: "moving", moveX: 45, speed: 1.7 },
-            { x: 540, y: 110, w: 100, h: 20, type: "static" },
-            { x: 350, y: 60,  w: 100, h: 20, type: "moving", moveX: 35, speed: 1.5 },
-            { x: 130, y: 50,  w: 140, h: 20, type: "static" }
+            { x: 20, y: 540, w: 120, h: 20, type: "static" },
+            { x: 200, y: 500, w: 100, h: 20, type: "moving", moveX: 70, speed: 2.0 },
+            { x: 420, y: 450, w: 100, h: 20, type: "moving", moveY: 40, speed: 1.5 },
+            { x: 600, y: 400, w: 100, h: 20, type: "static" },
+            { x: 400, y: 340, w: 110, h: 20, type: "moving", moveX: 50, speed: 1.8 },
+            { x: 180, y: 280, w: 100, h: 20, type: "moving", moveY: 35, speed: 1.2 },
+            { x: 350, y: 220, w: 120, h: 20, type: "static" },
+            { x: 550, y: 160, w: 100, h: 20, type: "moving", moveX: 40, speed: 1.5 },
+            { x: 350, y: 100, w: 130, h: 20, type: "static" },
+            { x: 600, y: 50, w: 120, h: 20, type: "static" }
         ],
         obstacles: [
-            { x: 120, y: 520, w: 20, h: 20, type: "spike" },
-            { x: 250, y: 450, w: 20, h: 20, type: "spike" },
-            { x: 480, y: 330, w: 20, h: 20, type: "spike" },
-            { x: 240, y: 210, w: 25, h: 25, type: "moving_block", moveY: 35, speed: 1.6 },
-            { x: 520, y: 90,  w: 20, h: 20, type: "spike" },
-            { x: 300, y: 140, w: 25, h: 25, type: "moving_block", moveX: 30, speed: 1.9 }
+            { x: 650, y: 380, w: 18, h: 18, type: "spike" },
+            { x: 450, y: 320, w: 18, h: 18, type: "spike" },
+            { x: 230, y: 260, w: 18, h: 18, type: "spike" },
+            { x: 400, y: 200, w: 18, h: 18, type: "spike" },
+            { x: 600, y: 140, w: 18, h: 18, type: "spike" },
+            { x: 400, y: 80, w: 18, h: 18, type: "spike" }
         ],
-        goal: { x: 170, y: 10, w: 40, h: 40 }
+        goal: { x: 630, y: 10, w: 40, h: 40 },
+        gravityZones: [
+            { x: 350, y: 280, w: 100, h: 80, type: "pulse" },
+            { x: 150, y: 230, w: 80, h: 80, type: "reverse" },
+            { x: 500, y: 110, w: 100, h: 80, type: "zero" },
+            { x: 340, y: 50, w: 80, h: 60, type: "right" }
+        ]
     }
 ];
 
@@ -292,38 +263,49 @@ const FALLBACK_STORIES = [
 ];
 
 const FALLBACK_NARRATIONS = {
+    gravity_shift: [
+        "The forces bend to a new will.",
+        "Gravity remembers a different direction.",
+        "The world tilts—hold on.",
+        "Physics rewrites itself.",
+        "The pull changes. Adapt or fall."
+    ],
     near_death: [
-        "The void hungers.",
-        "Almost lost to the void.",
-        "Death whispered close.",
-        "The edge of oblivion.",
-        "Breath caught in silence."
+        "The void almost claimed another.",
+        "So close to the end—but not yours.",
+        "Death whispered. The ball refused.",
+        "A narrow escape from oblivion.",
+        "The shadows reached out—and missed."
     ],
     level_complete: [
-        "The rules bend to your will!",
-        "The impossible, conquered.",
-        "Light breaks through chaos.",
-        "You defied the pull.",
-        "Freedom tastes like flight."
+        "Another world conquered by courage.",
+        "The platform beckons forward.",
+        "Victory echoes through broken physics.",
+        "One more fracture sealed by resolve.",
+        "The gravity bends to the champion."
     ],
     physics_shift: [
-        "Reality shifts beneath you.",
-        "The rules just changed.",
-        "Forces forget their names.",
-        "The world twists around you.",
-        "Physics rewrites itself."
+        "The rules rewrite themselves.",
+        "Nothing stays constant here.",
+        "Reality is just a suggestion."
     ]
 };
 
 const FALLBACK_ENDINGS = [
-    "The ball rests still for the first time.\nThe fractured rules now heal.\nThe world remembers how to fall gently.",
-    "Against every pull and push,\nyou found your way through the fracture.\nThe sky is yours now.",
-    "Silence returns to the corridors of chaos.\nThe sphere glows with quiet triumph.\nThe universe whispers: 'Well played.'"
+    "The gravity releases its grip.\nThe sphere ascends, free at last.\nA new physics is born from courage.",
+    "Through broken worlds and shattered rules,\nOne small sphere defied them all.\nThe void grows quiet—the journey ends.",
+    "Every fall was a lesson.\nEvery bounce, a rebellion.\nThe universe bows to the one who persisted."
 ];
 
-// ── API Call Helper ────────────────────────────────────────
-async function callGemini(prompt, maxRetries = 2) {
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+const FALLBACK_HINTS = [
+    ['Try jumping diagonally toward the nearest platform.', 'Watch the moving platform\'s rhythm before jumping.', '1. Head right, then up.\n2. Time the moving platform.\n3. Leap to the glowing goal.'],
+    ['Momentum is your friend in tight spots.', 'The red spike near the third platform requires precise timing.', '1. Clear the first gap quickly.\n2. Wait for the moving block to pass.\n3. Sprint to the goal platform.'],
+    ['Look up — the path continues higher.', 'A gravity zone halfway up changes everything.', '1. Climb the left staircase.\n2. Use the gravity zone to your advantage.\n3. Jump to the goal at the top.']
+];
+
+// ── API Call ──────────────────────────────────────────────
+async function callGemini(prompt, retries = 2) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
         try {
             const response = await fetch(GEMINI_ENDPOINT, {
                 method: 'POST',
@@ -332,48 +314,52 @@ async function callGemini(prompt, maxRetries = 2) {
             });
 
             if (!response.ok) {
-                throw new Error(`API Error: ${response.status}`);
+                console.warn(`Gemini API ${response.status} (attempt ${attempt + 1})`);
+                if (attempt < retries) {
+                    await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+                    continue;
+                }
+                return null;
             }
 
             const data = await response.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!text) throw new Error('Empty response');
-            return text.trim();
-        } catch (err) {
-            console.warn(`Gemini API attempt ${attempt + 1} failed:`, err.message);
-            if (attempt === maxRetries) return null;
-            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            return text || null;
+        } catch (e) {
+            console.warn(`Gemini API error (attempt ${attempt + 1}):`, e.message);
+            if (attempt < retries) {
+                await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+            }
         }
     }
     return null;
 }
 
-// ── Level Generation (with Adaptive Difficulty) ──────────────
+// ── Level Generation (with Adaptive Difficulty) ────────────
 async function generateLevel(levelNumber) {
-    const difficulties = ['easy', 'easy', 'easy', 'medium', 'medium', 'medium', 'hard', 'hard', 'hard', 'hard'];
+    const difficulties = ['easy','easy','easy','medium','medium','medium','hard','hard','hard','hard'];
     const diff = difficulties[Math.min(levelNumber - 1, 9)];
 
-    // Adaptive difficulty adjustment
     let adaptiveInfo = { adjustment: 'maintain', detail: '' };
     if (window.PlayerStats) {
         adaptiveInfo = window.PlayerStats.calculateAdaptiveDifficulty(3);
     }
 
-    let prompt = `Generate a 2D Bounce-style level in JSON format for a canvas game (800x580 play area).
+    let prompt = `Generate a Bounce-style 2.5D level in JSON format for a canvas game (800x580 play area).
 Level number: ${levelNumber}, Difficulty: ${diff}
 
 Include:
 - "name": creative level name string
-- "platforms": array of objects with {x, y, w, h, type} where type is "static" or "moving". Moving platforms also have moveX or moveY (pixels) and speed. All platforms must have y between 30 and 550, x between 0 and 660. Widths 80-250, height always 20.
-- "obstacles": array of objects with {x, y, w, h, type} where type is "spike" or "moving_block". Moving blocks have moveX or moveY and speed.
+- "platforms": array of {x, y, w, h, type} where type is "static" or "moving". Moving platforms also have moveX or moveY (pixels) and speed. All platforms: y between 30-550, x between 0-660. Widths 80-250, height always 20.
+- "obstacles": array of {x, y, w, h, type} where type is "spike" or "moving_block". Moving blocks have moveX/moveY and speed.
+- "gravityZones": array of {x, y, w, h, type} where type is one of: "normal", "reverse", "left", "right", "zero", "pulse". These are areas that change gravity when the ball enters.
 - "difficulty": "${diff}"
-- "goal": {x, y, w: 40, h: 40} — the level endpoint, placed on a platform
+- "goal": {x, y, w: 40, h: 40} — the level endpoint placed on a platform
 
-Include 6-9 platforms and 3-6 obstacles. First platform should be at bottom-left for spawn.
+Include 6-9 platforms, 3-6 obstacles, and 1-3 gravity zones. First platform at bottom-left for spawn.
 
 Return ONLY valid JSON, no markdown, no code fences, no explanation.`;
 
-    // Apply adaptive adjustment to prompt
     if (window.PlayerStats) {
         prompt = window.PlayerStats.adjustLevelPrompt(prompt, adaptiveInfo.adjustment);
     }
@@ -383,11 +369,11 @@ Return ONLY valid JSON, no markdown, no code fences, no explanation.`;
         try {
             let jsonStr = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
             const level = JSON.parse(jsonStr);
-
             if (level.platforms && level.platforms.length > 0 && level.goal) {
                 level.difficulty = level.difficulty || diff;
                 level.name = level.name || `Level ${levelNumber}`;
-                level._adaptive = adaptiveInfo.adjustment;  // tag for UI
+                level.gravityZones = level.gravityZones || [];
+                level._adaptive = adaptiveInfo.adjustment;
                 return level;
             }
         } catch (e) {
@@ -395,100 +381,73 @@ Return ONLY valid JSON, no markdown, no code fences, no explanation.`;
         }
     }
 
-    // Fallback
     const fallback = FALLBACK_LEVELS[(levelNumber - 1) % FALLBACK_LEVELS.length];
     return { ...fallback, name: fallback.name || `Level ${levelNumber}`, _adaptive: adaptiveInfo.adjustment };
 }
 
-// ── Story Generation ───────────────────────────────────────
+// ── Story Generation ──────────────────────────────────────
 async function generateStory(levelNumber) {
-    const prompt = `Generate a 2-3 sentence story about a ball trapped in a world where physics is broken. This is level ${levelNumber}. Make it emotional and cinematic. Return only the story text, no quotes, no labels.`;
+    const prompt = `Write a 2-3 sentence cinematic story about a ball navigating a broken gravity world. This is level ${levelNumber}. Make it emotional and immersive. The ball faces shifting gravity, floating platforms, and reality fractures. Return only the story text.`;
 
     const response = await callGemini(prompt);
     if (response) {
         const clean = response.replace(/^["']|["']$/g, '').trim();
         if (clean.length > 10 && clean.length < 500) return clean;
     }
-
     return FALLBACK_STORIES[(levelNumber - 1) % FALLBACK_STORIES.length];
 }
 
-// ── Narration Generation (with Voice) ──────────────────────
+// ── Narration Generation ──────────────────────────────────
 async function generateNarration(event) {
-    const prompt = `In one short dramatic sentence (max 12 words), narrate this game event: ${event}. Return only the sentence.`;
+    const prompt = `In one dramatic sentence (max 12 words), narrate this game event: ${event}. The game is about a ball in a gravity-shifting world. Return only the sentence.`;
 
-    let text;
     const response = await callGemini(prompt);
     if (response) {
         const clean = response.replace(/^["']|["']$/g, '').trim();
-        if (clean.length > 3 && clean.length < 100) text = clean;
+        if (clean.length > 3 && clean.length < 100) return clean;
     }
-
-    if (!text) {
-        const fallbacks = FALLBACK_NARRATIONS[event] || FALLBACK_NARRATIONS.physics_shift;
-        text = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-    }
-
-    return text;
+    const fallbacks = FALLBACK_NARRATIONS[event] || FALLBACK_NARRATIONS.physics_shift;
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
 }
 
-// ── Ending Generation ──────────────────────────────────────
+// ── Ending Generation ─────────────────────────────────────
 async function generateEnding() {
-    const prompt = `Write a 3-line poetic ending about escaping a broken physics world. Emotional and cinematic tone. Each line on a new line. No labels, no quotes.`;
+    const prompt = `Write a 3-line poetic ending about escaping a gravity-shifting world. Emotional and cinematic. Each line on a new line. No labels, no quotes.`;
 
     const response = await callGemini(prompt);
     if (response) {
         const clean = response.replace(/^["']|["']$/g, '').trim();
         if (clean.length > 20) return clean;
     }
-
     return FALLBACK_ENDINGS[Math.floor(Math.random() * FALLBACK_ENDINGS.length)];
 }
 
-// ── AI Coach Hint System ───────────────────────────────────
-const FALLBACK_HINTS = [
-    ['Try jumping diagonally toward the nearest platform.', 'Watch the moving platform\'s rhythm before jumping.', '1. Head right, then up.\n2. Time the moving platform.\n3. Leap to the glowing goal.'],
-    ['Momentum is your friend in tight spots.', 'The red spike near the third platform requires precise timing.', '1. Clear the first gap quickly.\n2. Wait for the moving block to pass.\n3. Sprint to the goal platform.'],
-    ['Look up — the path continues higher.', 'A moving platform halfway up is your only bridge.', '1. Climb the left staircase.\n2. Ride the moving platform right.\n3. Jump to the goal at the top.']
-];
-
-/**
- * Generate a progressive hint for the stuck player.
- * @param {number} levelNumber
- * @param {number} hintTier  1 = gentle, 2 = tactical, 3 = step-by-step
- * @returns {Promise<string>}
- */
+// ── AI Coach Hint System ──────────────────────────────────
 async function generateHint(levelNumber, hintTier) {
     let prompt;
     if (hintTier === 1) {
-        prompt = `The player is stuck on level ${levelNumber} of a bounce platformer. Give a VAGUE 1-sentence hint about the general strategy. Don't mention specific platforms. Return ONLY the hint sentence.`;
+        prompt = `The player is stuck on level ${levelNumber} of a bounce platformer with gravity zones. Give a VAGUE 1-sentence hint. Return ONLY the hint sentence.`;
     } else if (hintTier === 2) {
-        prompt = `The player is stuck on level ${levelNumber} of a bounce platformer. Give a TACTICAL 2-sentence hint about a specific section. Mention one key platform or obstacle. Return ONLY the hint sentences.`;
+        prompt = `The player is stuck on level ${levelNumber} of a bounce platformer with gravity zones. Give a TACTICAL 2-sentence hint mentioning a key obstacle or gravity zone. Return ONLY the hint sentences.`;
     } else {
-        prompt = `The player is stuck on level ${levelNumber} of a bounce platformer. Give STEP-BY-STEP guidance in 3 numbered lines. Keep each step to 1 sentence.`;
+        prompt = `The player is stuck on level ${levelNumber} of a bounce platformer with gravity zones. Give STEP-BY-STEP guidance in 3 numbered lines. Keep each step to 1 sentence.`;
     }
 
     const response = await callGemini(prompt);
     if (response) {
         const clean = response.replace(/^["']|["']$/g, '').trim();
-        if (clean.length > 5 && clean.length < 500) {
-            console.log(`[Coach] Hint tier ${hintTier} for level ${levelNumber}`);
-            return clean;
-        }
+        if (clean.length > 5 && clean.length < 500) return clean;
     }
 
-    // Fallback
     const idx = (levelNumber - 1) % FALLBACK_HINTS.length;
     const tier = Math.min(hintTier, 3) - 1;
     return FALLBACK_HINTS[idx][tier];
 }
 
-// ── (TTS functionality removed) ────────────────────────────
-function speakText(text) {
-    // Disabled per request
-}
+// ── TTS (disabled) ────────────────────────────────────────
+function speakText(text) { /* disabled */ }
 
-// Export for modules
+// Export
 if (typeof window !== 'undefined') {
     window.AI = {
         generateLevel,
@@ -497,7 +456,7 @@ if (typeof window !== 'undefined') {
         generateEnding,
         generateHint,
         speakText,
-        _callGemini: callGemini,  // exposed for VoiceNarration emotion detection
+        _callGemini: callGemini,
         FALLBACK_LEVELS,
         FALLBACK_STORIES
     };

@@ -5,6 +5,7 @@
 const PlayerStats = (() => {
     const STORAGE_KEY = 'bounce_playerStats';
     const PREFS_KEY  = 'bounce_preferences';
+    const LEADERBOARD_KEY = 'bounce_leaderboard';
 
     // ── Internal State ─────────────────────────────────────
     let currentRun = null;   // metrics for the level being played right now
@@ -37,6 +38,54 @@ const PlayerStats = (() => {
         const prefs = getPrefs();
         prefs[key] = value;
         localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    }
+
+    function sanitizeName(name) {
+        const clean = String(name || '')
+            .replace(/[^a-zA-Z0-9 _-]/g, '')
+            .trim()
+            .slice(0, 15);
+        return clean || 'Pilot';
+    }
+
+    function getPlayerName() {
+        return sanitizeName(getPrefs().playerName || 'Pilot');
+    }
+
+    function setPlayerName(name) {
+        const clean = sanitizeName(name);
+        savePref('playerName', clean);
+        return clean;
+    }
+
+    function getLeaderboard() {
+        try {
+            return JSON.parse(localStorage.getItem(LEADERBOARD_KEY)) || [];
+        } catch {
+            return [];
+        }
+    }
+
+    function submitScore(entry) {
+        const all = getLeaderboard();
+        all.push({
+            name: sanitizeName(entry?.name || getPlayerName()),
+            score: Math.max(0, parseInt(entry?.score || 0, 10) || 0),
+            level: Math.max(1, parseInt(entry?.level || 1, 10) || 1),
+            timeTaken: Math.max(0, parseInt(entry?.timeTaken || 0, 10) || 0),
+            timestamp: entry?.timestamp || Date.now()
+        });
+
+        all.sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            if (b.level !== a.level) return b.level - a.level;
+            if (a.timeTaken !== b.timeTaken) return a.timeTaken - b.timeTaken;
+            return a.timestamp - b.timestamp;
+        });
+
+        const trimmed = all.slice(0, 10);
+        localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(trimmed));
+        return trimmed;
     }
 
     // ── Current Run Tracking ───────────────────────────────
@@ -162,6 +211,10 @@ const PlayerStats = (() => {
         getAll,
         getPrefs,
         savePref,
+        getPlayerName,
+        setPlayerName,
+        getLeaderboard,
+        submitScore,
         getHighScore,
         setHighScore,
         ADJUSTMENT

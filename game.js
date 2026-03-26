@@ -1,35 +1,39 @@
-66// ============================================================
-// GAME.JS — Physics Engine & Core Gameplay (tuned)
+// ============================================================
+// GAME.JS — Physics Engine, Gravity System & Core Gameplay
+// Bounce Tales: Gravity Shift — Smart 3D AI Edition
 // ============================================================
 
 // ── Canvas Setup ───────────────────────────────────────────
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const W = 800, H = 580;
 
-function resizeCanvas() {
-    const container = canvas.parentElement;
-    const maxWidth = Math.min(window.innerWidth - 40, 800);
-    const ratio = 580 / 800;
-    canvas.width = 800;
-    canvas.height = 580;
-    canvas.style.width = maxWidth + 'px';
-    canvas.style.height = (maxWidth * ratio) + 'px';
-}
-resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
-
-// ── Game State ─────────────────────────────────────────────
+// ── Game States ────────────────────────────────────────────
 const GameState = {
-    LOADING: 'loading',
-    STORY: 'story',
-    PLAYING: 'playing',
-    PAUSED: 'paused',
-    DEATH: 'death',
-    LEVEL_COMPLETE: 'level_complete',
-    GAME_OVER: 'game_over',
-    ENDING: 'ending'
+    LOADING: 'loading', STORY: 'story', PLAYING: 'playing',
+    DEATH: 'death', LEVEL_COMPLETE: 'level_complete',
+    GAME_OVER: 'game_over', ENDING: 'ending'
 };
 
+// ── Input ──────────────────────────────────────────────────
+const keys = {};
+const touchState = { left: false, right: false, jump: false };
+
+window.addEventListener('keydown', e => { keys[e.key] = true; if (['ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault(); });
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+function setupTouchControls() {
+    const wire = (id, prop) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('touchstart', e => { e.preventDefault(); touchState[prop] = true; });
+        el.addEventListener('touchend', e => { touchState[prop] = false; });
+    };
+    wire('btn-left', 'left');
+    wire('btn-right', 'right');
+    wire('btn-jump', 'jump');
+}
+
+// ── Game Variables ─────────────────────────────────────────
 let state = GameState.LOADING;
 let currentLevel = 1;
 const MAX_LEVEL = 10;
@@ -40,157 +44,192 @@ let levelData = null;
 let storyText = '';
 let narrationText = '';
 let narrationTimer = 0;
+let narrationCooldown = 0;
 let endingText = '';
-// Input feel helpers (fixed-step frame counts).
+let runStartedAt = Date.now();
+
+// Input feel helpers
 let coyoteTimer = 0;
 let jumpBufferTimer = 0;
 
-// Visual FX state
-let particles = [];        // generic particles (death, landing, goal)
-let screenShake = 0;       // frames remaining
-
 // AI Coach Hint state
-let hintTier = 0;          // 0 = no hints used, 1-3 = tiers
-let hintCooldown = 0;      // frames before hint button activates
-const HINT_COOLDOWN_FRAMES = 15 * 60; // 15 seconds at 60fps
-let levelStartFrame = 0;   // frame count when level began playing
-let gameFrameCount = 0;    // running frame counter
+let hintTier = 0;
+let hintCooldown = 0;
+const HINT_COOLDOWN_FRAMES = 15 * 60;
+let levelStartFrame = 0;
+let gameFrameCount = 0;
+
+// ── Gravity System ─────────────────────────────────────────
+// Types: normal, reverse, left, right, zero, pulse
+const GravityTypes = {
+    NORMAL:  'normal',
+    REVERSE: 'reverse',
+    LEFT:    'left',
+    RIGHT:   'right',
+    ZERO:    'zero',
+    PULSE:   'pulse'
+};
+
+let currentGravity = GravityTypes.NORMAL;
+let gravityTransitionTimer = 0;
+const GRAVITY_STRENGTH = 0.45;
+
+function getGravityVector() {
+    switch (currentGravity) {
+        case GravityTypes.NORMAL:  return { gx: 0, gy: GRAVITY_STRENGTH };
+        case GravityTypes.REVERSE: return { gx: 0, gy: -GRAVITY_STRENGTH };
+        case GravityTypes.LEFT:   return { gx: -GRAVITY_STRENGTH, gy: 0.10 };
+        case GravityTypes.RIGHT:  return { gx: GRAVITY_STRENGTH, gy: 0.10 };
+        case GravityTypes.ZERO:   return { gx: 0, gy: 0.02 }; // tiny drift
+        case GravityTypes.PULSE:
+            const burst = Math.sin(Date.now() / 300) * GRAVITY_STRENGTH * 1.5;
+            return { gx: 0, gy: burst };
+        default: return { gx: 0, gy: GRAVITY_STRENGTH };
+    }
+}
+
+function switchGravity(type) {
+    if (currentGravity === type) return;
+    currentGravity = type;
+    gravityTransitionTimer = 30;
+    triggerNarration('gravity_shift');
+    UI.updateGravityIndicator(type);
+}
+
+// ── Tension System ─────────────────────────────────────────
+let tension = 0;
+const TENSION_MAX = 100;
+
+function updateTension() {
+    // Increase near obstacles
+    let nearObstacle = false;
+    obstacles.forEach(o => {
+        const dx = ball.x - (o.x + o.w / 2);
+        const dy = ball.y - (o.y + o.h / 2);
+        if (Math.hypot(dx, dy) < 80) nearObstacle = true;
+    });
+    if (nearObstacle) tension = Math.min(TENSION_MAX, tension + 0.4);
+
+    // Increase near goal
+    if (goal) {
+        const dx = ball.x - (goal.x + goal.w / 2);
+        const dy = ball.y - (goal.y + goal.h / 2);
+        if (Math.hypot(dx, dy) < 120) tension = Math.min(TENSION_MAX, tension + 0.3);
+    }
+
+    // Decay
+    tension = Math.max(0, tension - 0.15);
+
+    // Death spike
+    if (state === GameState.DEATH) tension = Math.min(TENSION_MAX, tension + 5);
+
+    // Tension affects movement speed multiplier
+    ball.speedMultiplier = 1 + (tension / TENSION_MAX) * 0.3;
+}
 
 // ── Ball ───────────────────────────────────────────────────
 const ball = {
-    x: 50,
-    y: 500,
+    x: 50, y: H - 50,
+    vx: 0, vy: 0,
     radius: 12,
-    vx: 0,
-    vy: 0,
-    speed: 4.5,
-    // Canvas y grows downward, so negative is "jump up".
-    jumpForce: -10,
+    jumpForce: -9.5,
+    moveSpeed: 3.5,
+    maxVx: 5,
+    maxVy: 14,
+    friction: 0.88,
     onGround: false,
     trail: [],
     glowIntensity: 0,
-    squash: 1,              // vertical scale (< 1 = squash, > 1 = stretch)
+    squash: 1,
+    speedMultiplier: 1,
     alive: true
 };
 
-// ── Classic Constant Gravity ─────────────────────────────
-const GRAVITY_ACCEL_Y = 0.45;   // per fixed update step
-const GRAVITY_COLOR  = '#4fc3f7';
-const BALL_COLOR_ALT = '#80d8ff'; // lighter shade for FX variety
-
-// ── Platforms & Obstacles ──────────────────────────────────
+// ── Level Data ─────────────────────────────────────────────
 let platforms = [];
 let obstacles = [];
 let goal = null;
-let platformTime = 0;
+let gravityZones = [];
 
+// ── Fixed Timestep ─────────────────────────────────────────
+const FIXED_DT = 1000 / 60;
+let accumulator = 0;
+let lastTime = null;
+
+const COYOTE_FRAMES = 6;
+const JUMP_BUFFER_FRAMES = 6;
+
+// ── Load Level ─────────────────────────────────────────────
 function loadLevel(data) {
     levelData = data;
-    platforms = data.platforms.map(p => ({
-        ...p,
-        originX: p.x,
-        originY: p.y,
-        moveX: p.moveX || 0,
-        moveY: p.moveY || 0,
+    platforms = (data.platforms || []).map(p => ({
+        x: p.x, y: p.y, w: p.w, h: p.h || 20,
+        type: p.type || 'static',
+        moveX: p.moveX || 0, moveY: p.moveY || 0,
         speed: p.speed || 1,
-        // Used to "carry" the ball when the platform is moving.
-        vx: 0,
-        vy: 0,
-        prevX: p.x,
-        prevY: p.y
+        _origX: p.x, _origY: p.y,
+        _phase: Math.random() * Math.PI * 2
     }));
-    obstacles = data.obstacles.map(o => ({
-        ...o,
-        originX: o.x,
-        originY: o.y,
-        moveX: o.moveX || 0,
-        moveY: o.moveY || 0,
-        speed: o.speed || 1,
-        vx: 0,
-        vy: 0,
-        prevX: o.x,
-        prevY: o.y
-    }));
-    goal = { ...data.goal };
 
-    // Reset ball position 
+    obstacles = (data.obstacles || []).map(o => ({
+        x: o.x, y: o.y, w: o.w || 20, h: o.h || 20,
+        type: o.type || 'spike',
+        moveX: o.moveX || 0, moveY: o.moveY || 0,
+        speed: o.speed || 1,
+        _origX: o.x, _origY: o.y,
+        _phase: Math.random() * Math.PI * 2
+    }));
+
+    goal = data.goal ? { ...data.goal } : null;
+
+    // Gravity zones
+    gravityZones = (data.gravityZones || []).map(gz => ({
+        x: gz.x, y: gz.y, w: gz.w || 80, h: gz.h || 80,
+        type: gz.type || 'normal'
+    }));
+
+    // Reset ball
     const spawnPlatform = platforms[0];
-    ball.x = spawnPlatform.x + spawnPlatform.w / 2;
-    ball.y = spawnPlatform.y - ball.radius - 2;
+    if (spawnPlatform) {
+        ball.x = spawnPlatform.x + spawnPlatform.w / 2;
+        ball.y = spawnPlatform.y - ball.radius - 2;
+    } else {
+        ball.x = 50;
+        ball.y = H - 50;
+    }
     ball.vx = 0;
     ball.vy = 0;
-    ball.onGround = false;
     ball.alive = true;
     ball.trail = [];
+    ball.squash = 1;
 
-    platformTime = 0;
+    // Reset gravity & tension
+    currentGravity = GravityTypes.NORMAL;
+    tension = 0;
     deathCount = 0;
+    narrationCooldown = 0;
+
+    // Build 3D scene
+    if (window.Renderer3D) {
+        Renderer3D.buildLevel(platforms, obstacles, goal);
+    }
 }
 
+// ── Update Moving Platforms/Obstacles ───────────────────────
 function updatePlatforms() {
-    const dtSec = FIXED_DT / 1000;
-    platformTime += dtSec;
+    const t = Date.now() / 1000;
     platforms.forEach(p => {
         if (p.type === 'moving') {
-            const oldX = p.x;
-            const oldY = p.y;
-            if (p.moveX) p.x = p.originX + Math.sin(platformTime * p.speed) * p.moveX;
-            if (p.moveY) p.y = p.originY + Math.sin(platformTime * p.speed) * p.moveY;
-            p.vx = (p.x - oldX) / dtSec;
-            p.vy = (p.y - oldY) / dtSec;
+            if (p.moveX) p.x = p._origX + Math.sin(t * p.speed + p._phase) * p.moveX;
+            if (p.moveY) p.y = p._origY + Math.sin(t * p.speed + p._phase) * p.moveY;
         }
     });
     obstacles.forEach(o => {
         if (o.type === 'moving_block') {
-            const oldX = o.x;
-            const oldY = o.y;
-            if (o.moveX) o.x = o.originX + Math.sin(platformTime * o.speed) * o.moveX;
-            if (o.moveY) o.y = o.originY + Math.sin(platformTime * o.speed) * o.moveY;
-            o.vx = (o.x - oldX) / dtSec;
-            o.vy = (o.y - oldY) / dtSec;
+            if (o.moveX) o.x = o._origX + Math.sin(t * o.speed + o._phase) * o.moveX;
+            if (o.moveY) o.y = o._origY + Math.sin(t * o.speed + o._phase) * o.moveY;
         }
     });
-}
-
-// ── Input ──────────────────────────────────────────────────
-const keys = {};
-let jumpJustPressed = false;
-window.addEventListener('keydown', e => {
-    const wasDown = keys[e.key] === true;
-    keys[e.key] = true;
-    if (e.key === 'ArrowUp' || e.key === ' ') e.preventDefault();
-    // Only treat as "just pressed" on rising edge (prevents repeated jump while holding).
-    if (!wasDown && (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'w')) jumpJustPressed = true;
-});
-window.addEventListener('keyup', e => {
-    keys[e.key] = false;
-});
-
-// Touch controls
-const touchState = { left: false, right: false, jump: false };
-const touchJustPressed = { left: false, right: false, jump: false };
-
-function setupTouchControls() {
-    const btnLeft = document.getElementById('btn-left');
-    const btnRight = document.getElementById('btn-right');
-    const btnJump = document.getElementById('btn-jump');
-
-    if (!btnLeft) return;
-
-    const addTouch = (el, key) => {
-        el.addEventListener('touchstart', e => {
-            e.preventDefault();
-            touchState[key] = true;
-            touchJustPressed[key] = true;
-        });
-        el.addEventListener('touchend', e => { e.preventDefault(); touchState[key] = false; });
-        el.addEventListener('mousedown', e => { touchState[key] = true; });
-        el.addEventListener('mouseup', e => { touchState[key] = false; });
-    };
-
-    addTouch(btnLeft, 'left');
-    addTouch(btnRight, 'right');
-    addTouch(btnJump, 'jump');
 }
 
 // ── Physics ────────────────────────────────────────────────
@@ -200,46 +239,56 @@ function updateBall() {
     // Input
     const moveLeft = keys['ArrowLeft'] || keys['a'] || touchState.left;
     const moveRight = keys['ArrowRight'] || keys['d'] || touchState.right;
+    const jumpPressed = keys['ArrowUp'] || keys['w'] || keys[' '] || touchState.jump;
 
-    // Jump buffering / coyote time (makes timing feel less "glitchy").
-    // We use fixed-step frames, so keep these in frame counts.
-    const COYOTE_FRAMES = 6; // ~100ms
-    const JUMP_BUFFER_FRAMES = 6; // ~100ms
+    // Horizontal movement (tension-boosted)
+    const speed = ball.moveSpeed * ball.speedMultiplier;
+    if (moveLeft) ball.vx -= speed * 0.3;
+    if (moveRight) ball.vx += speed * 0.3;
+    ball.vx *= ball.friction;
+    ball.vx = Math.max(-ball.maxVx, Math.min(ball.maxVx, ball.vx));
+
+    // Coyote time
     if (ball.onGround) coyoteTimer = COYOTE_FRAMES;
     else coyoteTimer = Math.max(0, coyoteTimer - 1);
 
-    const jumpPressed = jumpJustPressed || touchJustPressed.jump;
-    jumpJustPressed = false;
-    touchJustPressed.jump = false;
+    // Jump buffer
     if (jumpPressed) jumpBufferTimer = JUMP_BUFFER_FRAMES;
     else jumpBufferTimer = Math.max(0, jumpBufferTimer - 1);
 
-    if (moveLeft) ball.vx = -ball.speed;
-    else if (moveRight) ball.vx = ball.speed;
-    else ball.vx *= 0.85;
-
-    // Apply classic constant physics acceleration.
-    ball.vy += GRAVITY_ACCEL_Y;
-
     // Jump
     if (jumpBufferTimer > 0 && coyoteTimer > 0) {
-        jumpBufferTimer = 0;
-        coyoteTimer = 0;
         ball.vy = ball.jumpForce;
         ball.onGround = false;
+        coyoteTimer = 0;
+        jumpBufferTimer = 0;
+        ball.squash = 1.25;
     }
 
-    // Terminal velocity
-    ball.vx = Math.max(-12, Math.min(12, ball.vx));
-    ball.vy = Math.max(-12, Math.min(12, ball.vy));
+    // Gravity
+    const grav = getGravityVector();
+    ball.vx += grav.gx;
+    ball.vy += grav.gy;
 
-    // Move
+    // Gravity transition smoothing
+    if (gravityTransitionTimer > 0) {
+        ball.vy *= 0.92;
+        gravityTransitionTimer--;
+    }
+
+    ball.vy = Math.max(-ball.maxVy, Math.min(ball.maxVy, ball.vy));
+
+    // Position
     ball.x += ball.vx;
     ball.y += ball.vy;
 
-    // Wall collision
+    // Walls
     if (ball.x - ball.radius < 0) { ball.x = ball.radius; ball.vx *= -0.5; }
-    if (ball.x + ball.radius > canvas.width) { ball.x = canvas.width - ball.radius; ball.vx *= -0.5; }
+    if (ball.x + ball.radius > W) { ball.x = W - ball.radius; ball.vx *= -0.5; }
+
+    // Floor / ceiling
+    if (ball.y + ball.radius > H) { killBall(); return; }
+    if (ball.y - ball.radius < 0) { ball.y = ball.radius; ball.vy *= -0.5; }
 
     // Platform collision
     const wasInAir = !ball.onGround;
@@ -250,11 +299,11 @@ function updateBall() {
         }
     });
 
-    // Landing squash + dust particles
+    // Landing squash
     if (ball.onGround && wasInAir) {
         ball.squash = 0.6;
-        spawnDust(ball.x, ball.y + ball.radius, 6);
     }
+
     // Obstacle collision
     obstacles.forEach(o => {
         if (rectCircleCollision(ball, o)) {
@@ -263,103 +312,108 @@ function updateBall() {
         }
     });
 
-    // Out of bounds
-    if (ball.y - ball.radius > canvas.height + 50 || ball.y + ball.radius < -50) {
-        killBall();
+    // Goal collision
+    if (goal && rectCircleCollision(ball, goal)) {
+        completeLevel();
+        return;
     }
 
-    // Goal check
-    if (goal && circleCircleCollision(ball, goal.x + goal.w / 2, goal.y + goal.h / 2, goal.w / 2)) {
-        completeLevel();
-    }
+    // Gravity zone detection
+    gravityZones.forEach(gz => {
+        if (ball.x > gz.x && ball.x < gz.x + gz.w &&
+            ball.y > gz.y && ball.y < gz.y + gz.h) {
+            switchGravity(gz.type);
+        }
+    });
 
     // Trail
     ball.trail.push({ x: ball.x, y: ball.y, alpha: 1 });
     if (ball.trail.length > 20) ball.trail.shift();
     ball.trail.forEach(t => t.alpha -= 0.05);
 
-    // Dynamic glow based on speed
-    const speed = Math.hypot(ball.vx, ball.vy);
-    ball.glowIntensity = 0.3 + Math.min(speed / 15, 0.7);
+    // Glow
+    const speed2 = Math.hypot(ball.vx, ball.vy);
+    ball.glowIntensity = 0.3 + Math.min(speed2 / 15, 0.7);
 
-    // Squash recovery (spring back toward 1)
+    // Squash recovery
     ball.squash += (1 - ball.squash) * 0.15;
-
-    // Stretch when falling fast
     if (Math.abs(ball.vy) > 6 && !ball.onGround) {
         ball.squash = 1 + Math.min(Math.abs(ball.vy) / 20, 0.3);
     }
+
+    // Tension
+    updateTension();
 }
 
+// ── Collision Detection ────────────────────────────────────
 function rectCircleCollision(circle, rect) {
     const cx = Math.max(rect.x, Math.min(circle.x, rect.x + rect.w));
     const cy = Math.max(rect.y, Math.min(circle.y, rect.y + rect.h));
     const dx = circle.x - cx;
     const dy = circle.y - cy;
-    // Epsilon makes edge contacts less "sticky" at high speeds.
-    const rr = circle.radius * circle.radius;
-    return (dx * dx + dy * dy) <= rr + 0.01;
+    return (dx * dx + dy * dy) < (circle.radius * circle.radius);
 }
 
-function circleCircleCollision(circle, cx, cy, r) {
-    const dx = circle.x - cx;
-    const dy = circle.y - cy;
-    const rr = circle.radius + r;
-    return (dx * dx + dy * dy) <= (rr * rr);
-}
+function resolveCollision(bll, rect) {
+    const cx = Math.max(rect.x, Math.min(bll.x, rect.x + rect.w));
+    const cy = Math.max(rect.y, Math.min(bll.y, rect.y + rect.h));
+    const dx = bll.x - cx;
+    const dy = bll.y - cy;
+    const dist = Math.hypot(dx, dy) || 1;
 
-function resolveCollision(circle, rect) {
-    const midX = rect.x + rect.w / 2;
-    const midY = rect.y + rect.h / 2;
+    const overlap = bll.radius - dist;
+    if (overlap <= 0) return;
 
-    const dx = circle.x - midX;
-    const dy = circle.y - midY;
-    const halfW = rect.w / 2 + circle.radius;
-    const halfH = rect.h / 2 + circle.radius;
+    const nx = dx / dist;
+    const ny = dy / dist;
+    bll.x += nx * overlap * 1.01;
+    bll.y += ny * overlap * 1.01;
 
-    const overlapX = halfW - Math.abs(dx);
-    const overlapY = halfH - Math.abs(dy);
-
-    if (overlapX < overlapY) {
-        // Horizontal collision
-        circle.x += overlapX * Math.sign(dx);
-        circle.vx = circle.vx * -0.3 + (rect.vx || 0) * 0.25;
-        circle.onGround = false;
+    if (Math.abs(ny) > Math.abs(nx)) {
+        bll.vy = 0;
+        if (ny < 0) bll.onGround = true;
     } else {
-        // Vertical collision
-        circle.y += overlapY * Math.sign(dy);
-        // When dy < 0, the ball is being pushed upward (meaning it landed on the top of the platform).
-        circle.onGround = dy < 0;
-        // If we landed on a moving platform, inherit a bit of its horizontal motion.
-        if (circle.onGround) {
-            circle.vx += (rect.vx || 0) * 0.5;
-        }
-        circle.vy = 0;
+        bll.vx = 0;
     }
 }
 
+// ── Narration ──────────────────────────────────────────────
+async function triggerNarration(event) {
+    if (narrationCooldown > 0) return;
+    narrationCooldown = 180;
+
+    const narr = await window.AI.generateNarration(event);
+    narrationText = narr;
+    narrationTimer = 150;
+    UI.showNarration(narr);
+}
+
+// ── Kill / Complete ────────────────────────────────────────
 function killBall() {
     if (!ball.alive) return;
     ball.alive = false;
     lives--;
     deathCount++;
-    screenShake = 12;              // ~200ms shake
+    tension = Math.min(TENSION_MAX, tension + 20);
 
     // Track for adaptive difficulty
     if (window.PlayerStats) window.PlayerStats.recordDeath();
 
-    // Death burst particles
-    spawnBurst(ball.x, ball.y, '#ff5252', 20);
-    spawnBurst(ball.x, ball.y, '#ffab40', 10);
+    // 3D effects
+    if (window.Renderer3D) {
+        Renderer3D.shake(3);
+        Renderer3D.burst(ball.x, ball.y, 0xff5252, 25);
+        Renderer3D.burst(ball.x, ball.y, 0xffab40, 12);
+    }
 
     triggerNarration('near_death');
 
     setTimeout(() => {
         if (lives <= 0) {
+            persistLeaderboardResult();
             state = GameState.GAME_OVER;
             UI.showGameOver();
         } else {
-            // Respawn
             const spawnPlatform = platforms[0];
             ball.x = spawnPlatform.x + spawnPlatform.w / 2;
             ball.y = spawnPlatform.y - ball.radius - 2;
@@ -368,6 +422,7 @@ function killBall() {
             ball.alive = true;
             ball.trail = [];
             ball.squash = 1;
+            currentGravity = GravityTypes.NORMAL;
             state = GameState.PLAYING;
         }
     }, 1000);
@@ -378,20 +433,19 @@ function killBall() {
 async function completeLevel() {
     state = GameState.LEVEL_COMPLETE;
 
-    // Score: base 1000 + death bonus (fewer deaths = more points)
     const deathBonus = Math.max(0, 500 - deathCount * 100);
-    score += 1000 + deathBonus;
+    const tensionBonus = Math.round(tension * 2);
+    score += 1000 + deathBonus + tensionBonus;
 
-    // Persist stats for adaptive difficulty
     if (window.PlayerStats) {
         window.PlayerStats.endLevel(true);
         window.PlayerStats.setHighScore(score);
     }
 
-    // Victory particles at goal
-    if (goal) {
-        spawnBurst(goal.x + goal.w / 2, goal.y + goal.h / 2, '#4caf50', 25);
-        spawnBurst(goal.x + goal.w / 2, goal.y + goal.h / 2, '#81c784', 15);
+    // 3D victory effects
+    if (goal && window.Renderer3D) {
+        Renderer3D.burst(goal.x + goal.w / 2, goal.y + goal.h / 2, 0x4caf50, 30);
+        Renderer3D.burst(goal.x + goal.w / 2, goal.y + goal.h / 2, 0x81c784, 20);
     }
 
     const narr = await window.AI.generateNarration('level_complete');
@@ -401,311 +455,50 @@ async function completeLevel() {
     UI.showLevelComplete(currentLevel, score);
 }
 
-// ── Narration ──────────────────────────────────────────────
-let narrationCooldown = 0;
-
-async function triggerNarration(event) {
-    if (narrationCooldown > 0) return;
-    narrationCooldown = 180; // 3 seconds cooldown
-
-    const narr = await window.AI.generateNarration(event);
-    narrationText = narr;
-    narrationTimer = 150;
-
-    // Optional TTS
-    if (window.ttsEnabled) {
-        window.AI.speakText(narr);
-    }
-}
-
-// ── Particle Helpers ───────────────────────────────────────
-function spawnBurst(x, y, color, count) {
-    for (let i = 0; i < count; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const spd = 1 + Math.random() * 3;
-        particles.push({
-            x, y,
-            vx: Math.cos(angle) * spd,
-            vy: Math.sin(angle) * spd - 1,
-            life: 1,
-            size: 2 + Math.random() * 3,
-            color
-        });
-    }
-}
-
-function spawnDust(x, y, count) {
-    for (let i = 0; i < count; i++) {
-        particles.push({
-            x: x + (Math.random() - 0.5) * 20,
-            y,
-            vx: (Math.random() - 0.5) * 2,
-            vy: -(Math.random() * 1.5),
-            life: 1,
-            size: 1.5 + Math.random() * 2,
-            color: 'rgba(200,220,255,0.6)'
-        });
-    }
-}
-
-function updateParticles() {
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += 0.06;   // micro-gravity on particles
-        p.life -= 0.025;
-        if (p.life <= 0) particles.splice(i, 1);
-    }
-}
-
-// ── Rendering ──────────────────────────────────────────────
-const starField = [];
-for (let i = 0; i < 100; i++) {
-    starField.push({
-        x: Math.random() * 800,
-        y: Math.random() * 580,
-        size: Math.random() * 2 + 0.5,
-        speed: Math.random() * 0.3 + 0.1,
-        twinkle: Math.random() * Math.PI * 2
-    });
-}
-
-function render() {
-    // Screen shake offset
-    let shakeX = 0, shakeY = 0;
-    if (screenShake > 0) {
-        shakeX = (Math.random() - 0.5) * screenShake * 1.2;
-        shakeY = (Math.random() - 0.5) * screenShake * 1.2;
-        screenShake--;
-    }
-
-    ctx.save();
-    ctx.translate(shakeX, shakeY);
-
-    // Background
-    const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    bgGrad.addColorStop(0, '#0a0e27');
-    bgGrad.addColorStop(0.5, '#1a1040');
-    bgGrad.addColorStop(1, '#0d1b2a');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(-10, -10, canvas.width + 20, canvas.height + 20);
-
-    // Stars
-    starField.forEach(s => {
-        s.twinkle += 0.02;
-        const alpha = 0.3 + Math.sin(s.twinkle) * 0.3;
-        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-        ctx.fill();
-        s.y += s.speed;
-        if (s.y > 580) s.y = 0;
-        if (s.y < 0) s.y = 580;
-    });
-
-    // Platforms
-    platforms.forEach(p => {
-        const grad = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
-        if (p.type === 'moving') {
-            grad.addColorStop(0, '#ff6f61');
-            grad.addColorStop(1, '#d32f2f');
-        } else {
-            grad.addColorStop(0, '#4dd0e1');
-            grad.addColorStop(1, '#00838f');
+// ── Gravity Zone Trigger (timed) ───────────────────────────
+let gravityShiftTimer = 0;
+function updateGravityShifts() {
+    gravityShiftTimer++;
+    // Every ~10 seconds, maybe trigger a gravity event based on tension
+    if (gravityShiftTimer > 600) {
+        gravityShiftTimer = 0;
+        if (tension > 50 && gravityZones.length === 0) {
+            // High tension → random gravity shift
+            const types = Object.values(GravityTypes);
+            const pick = types[Math.floor(Math.random() * types.length)];
+            switchGravity(pick);
+            // Revert after a few seconds
+            setTimeout(() => switchGravity(GravityTypes.NORMAL), 4000);
         }
-        ctx.fillStyle = grad;
-        ctx.shadowColor = p.type === 'moving' ? '#ff6f61' : '#4dd0e1';
-        ctx.shadowBlur = 8;
-        roundRect(ctx, p.x, p.y, p.w, p.h, 4);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-    });
-
-    // Obstacles
-    obstacles.forEach(o => {
-        ctx.save();
-        if (o.type === 'spike') {
-            drawSpike(o);
-        } else {
-            ctx.fillStyle = '#ff1744';
-            ctx.shadowColor = '#ff1744';
-            ctx.shadowBlur = 12;
-            ctx.fillRect(o.x, o.y, o.w, o.h);
-            ctx.shadowBlur = 0;
-        }
-        ctx.restore();
-    });
-
-    // Goal
-    if (goal) {
-        const gx = goal.x + goal.w / 2;
-        const gy = goal.y + goal.h / 2;
-        const pulse = Math.sin(Date.now() / 300) * 0.3 + 0.7;
-        const rot = Date.now() / 800;  // spinning ring
-
-        ctx.fillStyle = `rgba(76, 175, 80, ${pulse})`;
-        ctx.shadowColor = '#4caf50';
-        ctx.shadowBlur = 20 * pulse;
-        ctx.beginPath();
-        ctx.arc(gx, gy, goal.w / 2, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Spinning inner ring
-        ctx.save();
-        ctx.translate(gx, gy);
-        ctx.rotate(rot);
-        ctx.strokeStyle = `rgba(200, 255, 200, ${pulse})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, goal.w / 3, 0, Math.PI * 1.5);
-        ctx.stroke();
-        ctx.restore();
-
-        // Outer glow ring
-        ctx.strokeStyle = `rgba(76, 175, 80, ${pulse * 0.3})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(gx, gy, goal.w / 2 + 6 + Math.sin(Date.now() / 400) * 3, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
     }
-
-    // Ball trail
-    ball.trail.forEach((t, i) => {
-        if (t.alpha <= 0) return;
-        ctx.fillStyle = GRAVITY_COLOR;
-        ctx.globalAlpha = t.alpha * 0.3;
-        ctx.beginPath();
-        ctx.arc(t.x, t.y, ball.radius * (t.alpha * 0.5), 0, Math.PI * 2);
-        ctx.fill();
-    });
-    ctx.globalAlpha = 1;
-
-    // Ball
-    if (ball.alive) {
-        ctx.save();
-        ctx.translate(ball.x, ball.y);
-        // Squash & stretch
-        const sx = 1 / ball.squash;  // inverse to keep volume constant
-        const sy = ball.squash;
-        ctx.scale(sx, sy);
-
-        // Glow
-        ctx.shadowColor = GRAVITY_COLOR;
-        ctx.shadowBlur = 15 + ball.glowIntensity * 20;
-
-        // Ball body gradient
-        const ballGrad = ctx.createRadialGradient(-3, -3, 2, 0, 0, ball.radius);
-        ballGrad.addColorStop(0, '#ffffff');
-        ballGrad.addColorStop(0.4, GRAVITY_COLOR);
-        ballGrad.addColorStop(1, shadeColor(GRAVITY_COLOR, -30));
-
-        ctx.fillStyle = ballGrad;
-        ctx.beginPath();
-        ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        // Highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.45)';
-        ctx.beginPath();
-        ctx.arc(-3, -4, ball.radius * 0.35, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.restore();
-    }
-
-    // Particles (death bursts, dust, goal sparkles)
-    particles.forEach(p => {
-        ctx.globalAlpha = Math.max(0, p.life);
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-        ctx.fill();
-    });
-    ctx.globalAlpha = 1;
-
-    // Narration text overlay
-    if (narrationTimer > 0) {
-        narrationTimer--;
-        const alpha = Math.min(1, narrationTimer / 30);
-        ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
-        ctx.font = 'italic 16px "Orbitron", "Segoe UI", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.shadowColor = 'rgba(0,0,0,0.8)';
-        ctx.shadowBlur = 6;
-        ctx.fillText(narrationText, canvas.width / 2, 40);
-        ctx.shadowBlur = 0;
-        ctx.textAlign = 'left';
-    }
-
-    ctx.restore(); // end screen-shake transform
-}
-
-function drawSpike(o) {
-    const pulse = 0.7 + Math.sin(Date.now() / 400 + o.x) * 0.3;
-    ctx.fillStyle = `rgba(255, 82, 82, ${pulse})`;
-    ctx.shadowColor = '#ff5252';
-    ctx.shadowBlur = 8 + pulse * 6;
-    ctx.beginPath();
-    ctx.moveTo(o.x, o.y + o.h);
-    ctx.lineTo(o.x + o.w / 2, o.y);
-    ctx.lineTo(o.x + o.w, o.y + o.h);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-}
-
-function shadeColor(color, percent) {
-    const num = parseInt(color.replace('#', ''), 16);
-    const r = Math.min(255, Math.max(0, (num >> 16) + percent));
-    const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + percent));
-    const b = Math.min(255, Math.max(0, (num & 0x0000FF) + percent));
-    return `rgb(${r},${g},${b})`;
 }
 
 // ── Game Loop ──────────────────────────────────────────────
-let lastTime = 0;
-let accumulator = 0;
-const FIXED_DT = 1000 / 60;
-
 function gameLoop(timestamp) {
     if (!lastTime) lastTime = timestamp;
     const delta = timestamp - lastTime;
     lastTime = timestamp;
-    // Cap accumulator to prevent spiral-of-death after tab switch
     accumulator += Math.min(delta, 200);
 
     while (accumulator >= FIXED_DT) {
         if (state === GameState.PLAYING) {
             updateBall();
             updatePlatforms();
+            updateGravityShifts();
             if (narrationCooldown > 0) narrationCooldown--;
             gameFrameCount++;
         }
-        updateParticles();
         accumulator -= FIXED_DT;
     }
 
-    render();
-
+    // 3D Render
     if (state === GameState.PLAYING || state === GameState.DEATH) {
-        UI.updateHUD(lives, score, currentLevel, MAX_LEVEL);
+        if (window.Renderer3D) {
+            Renderer3D.update(ball, platforms, obstacles, currentGravity, tension);
+        }
+        if (state === GameState.PLAYING) {
+            UI.updateHUD(lives, score, currentLevel, MAX_LEVEL, tension);
+        }
     }
 
     requestAnimationFrame(gameLoop);
@@ -716,12 +509,10 @@ async function startLevel(levelNum) {
     state = GameState.LOADING;
     UI.showLoading(levelNum);
 
-    // Reset hint state for new level
     hintTier = 0;
     hintCooldown = HINT_COOLDOWN_FRAMES;
     levelStartFrame = gameFrameCount;
 
-    // Generate story and level in parallel
     const [story, level] = await Promise.all([
         window.AI.generateStory(levelNum),
         window.AI.generateLevel(levelNum)
@@ -730,29 +521,30 @@ async function startLevel(levelNum) {
     storyText = story;
     loadLevel(level);
 
-    // Tell PlayerStats a new level is starting
     if (window.PlayerStats) {
         window.PlayerStats.startLevel(levelNum, level.difficulty);
     }
 
-    // Show adaptive difficulty notice
     const adaptiveTag = level._adaptive;
     let adaptiveMsg = '';
-    if (adaptiveTag === 'ease')      adaptiveMsg = 'Difficulty adjusted: slightly easier.';
+    if (adaptiveTag === 'ease') adaptiveMsg = 'Difficulty adjusted: slightly easier.';
     if (adaptiveTag === 'challenge') adaptiveMsg = 'Difficulty adjusted: extra challenge!';
 
-    // Show story
     state = GameState.STORY;
     UI.showStory(storyText, level.name || `Level ${levelNum}`, level.difficulty, () => {
         state = GameState.PLAYING;
         UI.showGameplay();
+        // Initial 3D render
+        if (window.Renderer3D) {
+            Renderer3D.update(ball, platforms, obstacles, currentGravity, tension);
+        }
     }, adaptiveMsg);
 }
 
 async function nextLevel() {
     currentLevel++;
     if (currentLevel > MAX_LEVEL) {
-        // Game ending
+        persistLeaderboardResult();
         state = GameState.ENDING;
         const ending = await window.AI.generateEnding();
         UI.showEnding(ending, score);
@@ -767,10 +559,13 @@ function restartGame() {
     score = 0;
     deathCount = 0;
     hintTier = 0;
+    tension = 0;
+    currentGravity = GravityTypes.NORMAL;
+    runStartedAt = Date.now();
     startLevel(1);
 }
 
-// ── Hint Request Handler ────────────────────────────────
+// ── Hint Request Handler ───────────────────────────────────
 async function requestHint() {
     if (state !== GameState.PLAYING) return;
     if ((gameFrameCount - levelStartFrame) < HINT_COOLDOWN_FRAMES) {
@@ -785,23 +580,66 @@ async function requestHint() {
     UI.showHint('💡 Thinking...');
     const hint = await window.AI.generateHint(currentLevel, hintTier);
     UI.showHint(hint);
-    console.log(`[Coach] Player used hint tier ${hintTier} on level ${currentLevel}`);
+}
+
+function persistLeaderboardResult() {
+    if (!window.PlayerStats?.submitScore) return;
+    const name = window.PlayerStats.getPlayerName();
+    const runSecs = Math.round((Date.now() - runStartedAt) / 1000);
+    window.PlayerStats.submitScore({
+        name,
+        score,
+        level: currentLevel,
+        timeTaken: runSecs,
+        timestamp: Date.now()
+    });
+    UI.refreshLeaderboards?.();
 }
 
 // ── Initialize ─────────────────────────────────────────────
-window.ttsEnabled = false;
-
 function initGame() {
+    // Init Three.js renderer
+    if (window.Renderer3D) {
+        Renderer3D.init(canvas);
+        window.addEventListener('resize', () => Renderer3D.resize());
+        Renderer3D.resize();
+    }
+
     setupTouchControls();
+
+    // Username handling
+    const input = document.getElementById('username-input');
+    const savedName = window.PlayerStats?.getPlayerName?.() || 'Pilot';
+    UI.setPlayerName?.(savedName);
+    if (input) {
+        input.value = savedName;
+        input.addEventListener('change', () => {
+            const clean = window.PlayerStats?.setPlayerName?.(input.value) || 'Pilot';
+            UI.setPlayerName?.(clean);
+        });
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const clean = window.PlayerStats?.setPlayerName?.(input.value) || 'Pilot';
+                UI.setPlayerName?.(clean);
+                document.getElementById('btn-start')?.focus();
+            }
+        });
+    }
+
+    UI.refreshLeaderboards?.();
+    UI.showTitle?.();
     requestAnimationFrame(gameLoop);
 
-    // Start button handler
     document.getElementById('btn-start')?.addEventListener('click', () => {
+        const chosen = window.PlayerStats?.setPlayerName?.(input?.value || savedName) || savedName;
+        UI.setPlayerName?.(chosen);
+        runStartedAt = Date.now();
         startLevel(1);
     });
 }
 
-// Export game functions
+// Export
 window.Game = {
     nextLevel,
     restartGame,
@@ -810,5 +648,7 @@ window.Game = {
     requestHint,
     get state() { return state; },
     get currentLevel() { return currentLevel; },
-    get score() { return score; }
+    get score() { return score; },
+    get tension() { return tension; },
+    get gravityMode() { return currentGravity; }
 };

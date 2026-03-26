@@ -3,43 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="description" content="Bounce Classic: Physics Rewritten — A futuristic AI-powered platformer where forces bend, levels generate dynamically, and every bounce tells a story.">
-    <title>Bounce Classic: Physics Rewritten (AI Edition)</title>
+    <meta name="description" content="Bounce Tales: Gravity Shift — A Smart 3D AI-powered platformer with anti-gravity physics, dynamic levels, and cinematic AI storytelling.">
+    <title>Bounce Tales: Gravity Shift — Smart 3D AI Edition</title>
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪐</text></svg>">
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
     <div id="game-container">
         <!-- Header -->
         <header class="game-header">
-            <h1 class="game-title">Bounce Classic</h1>
-            <p class="game-subtitle">Physics Rewritten · AI Edition</p>
+            <h1 class="game-title">Bounce Tales</h1>
+            <p class="game-subtitle">Gravity Shift · Smart 3D AI Edition</p>
         </header>
 
-        <!-- Canvas Wrapper -->
-        <div class="canvas-wrapper">
-            <canvas id="gameCanvas" width="800" height="580"></canvas>
+        <!-- 3D Canvas Wrapper -->
+        <div class="canvas-wrapper" id="canvas-wrapper">
+            <canvas id="gameCanvas"></canvas>
 
             <!-- ═══ Title Screen ═══ -->
             <div id="screen-title" class="screen-overlay active">
-                <div class="title-logo">BOUNCE CLASSIC</div>
-                <p class="title-tagline">Physics Rewritten · AI Edition</p>
+                <div class="title-logo">BOUNCE TALES</div>
+                <p class="title-tagline">Gravity Shift · Smart 3D AI Edition</p>
                 <div class="feature-list">
-                    <span class="feature-tag cyan">Classic Physics</span>
-                    <span class="feature-tag purple">AI Levels</span>
-                    <span class="feature-tag pink">Dynamic Story</span>
-                    <span class="feature-tag orange">AI Narration</span>
-                    <span class="feature-tag green">Classic Bounce</span>
+                    <span class="feature-tag cyan">Smart 3D</span>
+                    <span class="feature-tag purple">Anti-Gravity</span>
+                    <span class="feature-tag pink">AI Levels</span>
+                    <span class="feature-tag orange">AI Story</span>
+                    <span class="feature-tag green">Tension System</span>
                 </div>
+
+                <!-- Username Input -->
+                <div class="username-section">
+                    <input type="text" id="username-input" class="username-input" placeholder="Enter Pilot Name..." maxlength="15" autocomplete="off" spellcheck="false">
+                </div>
+
                 <button id="btn-start" class="btn-primary">Launch Game</button>
+
+                <!-- Leaderboard on Title -->
+                <div id="leaderboard-title" class="leaderboard-panel">
+                    <h3 class="leaderboard-heading">🏆 Gravity Legends</h3>
+                    <ol id="leaderboard-list-title" class="leaderboard-list"></ol>
+                    <p id="leaderboard-empty-title" class="leaderboard-empty">No records yet. Be the first!</p>
+                </div>
             </div>
 
             <!-- ═══ Loading Screen ═══ -->
             <div id="screen-loading" class="screen-overlay">
                 <div class="loader-ring"></div>
                 <div id="loading-text">Generating Level...</div>
-                <div id="loading-sub">Bending force fields...</div>
+                <div id="loading-sub">Bending gravity fields...</div>
             </div>
 
             <!-- ═══ Story Screen ═══ -->
@@ -49,14 +64,23 @@
                 <p id="story-text"></p>
                 <div class="story-meta">
                     <span id="story-difficulty" class="difficulty-badge diff-medium"></span>
+                    <span id="story-gravity" class="gravity-badge"></span>
                 </div>
                 <p id="story-adaptive-msg" class="adaptive-notice"></p>
                 <button id="btn-story-continue" class="btn-primary" style="margin-top: 16px;">Enter Level</button>
             </div>
 
-            <!-- ═══ Gameplay Screen (transparent — just enables HUD) ═══ -->
+            <!-- ═══ Gameplay HUD (transparent overlay) ═══ -->
             <div id="screen-gameplay" class="screen-overlay" style="background: transparent; backdrop-filter: none; pointer-events: none;">
-                <button id="btn-hint" class="hint-btn">💡 Get Hint</button>
+                <!-- Gravity Indicator -->
+                <div id="gravity-indicator" class="gravity-hud">
+                    <span id="gravity-icon">⬇</span>
+                    <span id="gravity-label">NORMAL</span>
+                </div>
+                <!-- Player Name Tag -->
+                <div id="player-name-tag" class="player-name-tag"></div>
+                <!-- Hint Button -->
+                <button id="btn-hint" class="hint-btn">💡 Hint</button>
                 <div id="hint-toast" class="hint-toast hidden"></div>
             </div>
 
@@ -65,6 +89,7 @@
                 <div class="lc-star">⭐</div>
                 <h2 id="lc-level">Level Complete!</h2>
                 <p id="lc-score">Score: 0</p>
+                <p id="lc-player" class="lc-player"></p>
                 <button id="btn-next-level" class="btn-primary">Next Level</button>
             </div>
 
@@ -73,7 +98,13 @@
                 <div class="go-icon">💀</div>
                 <h2 class="go-title">Game Over</h2>
                 <p id="go-score">Final Score: 0</p>
-                <button id="btn-restart" class="btn-primary">Try Again</button>
+                <p id="go-player" class="go-player"></p>
+                <!-- Mini leaderboard on game over -->
+                <div id="leaderboard-gameover" class="leaderboard-panel compact">
+                    <h3 class="leaderboard-heading">🏆 Top Pilots</h3>
+                    <ol id="leaderboard-list-gameover" class="leaderboard-list"></ol>
+                </div>
+                <button id="btn-restart" class="btn-primary" style="margin-top:12px;">Try Again</button>
             </div>
 
             <!-- ═══ Ending Screen ═══ -->
@@ -82,15 +113,35 @@
                 <h2 class="ending-title">You Escaped the Fracture</h2>
                 <p id="ending-text"></p>
                 <p id="ending-score"></p>
+                <p id="ending-player" class="ending-player"></p>
+                <!-- Mini leaderboard on ending -->
+                <div id="leaderboard-ending" class="leaderboard-panel compact">
+                    <h3 class="leaderboard-heading">🏆 Gravity Legends</h3>
+                    <ol id="leaderboard-list-ending" class="leaderboard-list"></ol>
+                </div>
                 <button id="btn-play-again" class="btn-primary" style="margin-top: 10px;">Play Again</button>
             </div>
+
+            <!-- Narration Overlay -->
+            <div id="narration-bar" class="narration-bar hidden"></div>
         </div>
 
         <!-- HUD Bar -->
         <div class="hud-bar" id="hud-bar">
             <div class="hud-section">
+                <span class="hud-label">Pilot</span>
+                <span id="hud-player" class="hud-value hud-player-name">—</span>
+            </div>
+            <div class="hud-section">
                 <span class="hud-label">Lives</span>
                 <span id="hud-lives" class="hud-value">♥♥♥♥♥</span>
+            </div>
+            <div class="hud-section tension-section">
+                <span class="hud-label">Tension</span>
+                <div class="tension-bar-wrap">
+                    <div id="tension-fill" class="tension-fill"></div>
+                </div>
+                <span id="tension-value" class="hud-value-sm">0</span>
             </div>
             <div class="hud-section">
                 <span class="hud-label">Score</span>
@@ -116,21 +167,19 @@
             <kbd>←</kbd> <kbd>→</kbd> Move &nbsp;·&nbsp; <kbd>↑</kbd> / <kbd>Space</kbd> Jump
         </div>
 
-
-
         <!-- Footer -->
         <footer class="game-footer">
-            Powered by Gemini AI · Canvas 2D Physics
+            Powered by Gemini AI · Three.js 3D Rendering
         </footer>
     </div>
 
     <!-- Scripts (order matters) -->
     <script src="playerStats.js"></script>
     <script src="ai.js"></script>
+    <script src="render.js"></script>
     <script src="ui.js"></script>
     <script src="game.js"></script>
     <script>
-        // Initialize when DOM is ready
         window.addEventListener('DOMContentLoaded', () => {
             window.Game.initGame();
         });
