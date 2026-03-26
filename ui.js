@@ -38,10 +38,49 @@ const UI = (() => {
     }
 
     // ── Title Screen ───────────────────────────────────────
+    let introPlayed = false;
     function showTitle() {
         showScreen('title');
         refreshLeaderboards();
-        setPlayerName(window.PlayerStats?.getPlayerName?.() || 'Pilot');
+        setPlayerName(window.PlayerStats?.getPlayerName?.() || 'Unknown Pilot');
+        
+        // Touch controls visibility check
+        const touchCtrls = document.querySelector('.touch-controls');
+        if (touchCtrls) {
+            touchCtrls.style.display = ('ontouchstart' in window) ? 'flex' : 'none';
+        }
+
+        if (!introPlayed) {
+            introPlayed = true;
+            const lines = document.querySelectorAll('.intro-line');
+            if (lines.length > 0) {
+                const logo = document.querySelector('.title-logo');
+                const tagline = document.querySelector('.title-tagline');
+                const features = document.querySelector('.feature-list');
+                const btn = document.getElementById('btn-start');
+                const nameInput = document.querySelector('.username-section');
+                
+                [logo, tagline, features, btn, nameInput].forEach(el => {
+                    if(el) el.style.opacity = '0';
+                });
+                
+                lines.forEach((line, i) => {
+                    setTimeout(() => line.classList.add('fade-in'), i * 800);
+                    setTimeout(() => line.classList.replace('fade-in', 'fade-out'), 3500);
+                });
+                
+                setTimeout(() => {
+                    const introEl = document.getElementById('cinematic-intro');
+                    if (introEl) introEl.style.display = 'none';
+                    [logo, tagline, features, btn, nameInput].forEach(el => {
+                        if(el && el.style) {
+                            el.style.transition = 'opacity 1s ease';
+                            el.style.opacity = '1';
+                        }
+                    });
+                }, 4000);
+            }
+        }
     }
 
     // ── Loading Screen ─────────────────────────────────────
@@ -162,12 +201,12 @@ const UI = (() => {
         if (!icon || !label || !hud) return;
 
         const config = {
-            normal:  { icon: '⬇', label: 'NORMAL',  color: '#4fc3f7' },
+            normal:  { icon: '⬇', label: 'NORMAL',  color: '#FFFFFF' },
             reverse: { icon: '⬆', label: 'REVERSE', color: '#b388ff' },
-            left:    { icon: '⬅', label: 'LATERAL', color: '#f48fb1' },
+            left:    { icon: '⬅', label: 'LATERAL', color: '#ffab40' },
             right:   { icon: '➡', label: 'LATERAL', color: '#ffab40' },
-            zero:    { icon: '🌀', label: 'ZERO-G',  color: '#81c784' },
-            pulse:   { icon: '💥', label: 'PULSE',   color: '#ff5252' }
+            zero:    { icon: '◎', label: 'ZERO-G',  color: '#00FFFF' },
+            pulse:   { icon: '⚡', label: 'PULSE',   color: '#ff5252' }
         };
         const c = config[mode] || config.normal;
         icon.textContent = c.icon;
@@ -177,12 +216,28 @@ const UI = (() => {
     }
 
     // ── HUD Updates ────────────────────────────────────────
+    let lastLives = 5;
     function updateHUD(lives, score, levelNum, maxLevel, tension = 0) {
-        if (hud.lives) hud.lives.textContent = '♥'.repeat(Math.max(0, lives));
+        if (hud.lives) {
+            if (lives < lastLives) {
+                if (navigator.vibrate) navigator.vibrate([80,30,80]);
+                hud.lives.innerHTML = '<span class="heart heart-crack">♥</span>' + '♥'.repeat(Math.max(0, lives));
+                setTimeout(() => { if(hud.lives) hud.lives.textContent = '♥'.repeat(Math.max(0, lives)); }, 400);
+            } else {
+                hud.lives.textContent = '♥'.repeat(Math.max(0, lives));
+            }
+            lastLives = lives;
+        }
         if (hud.score) hud.score.textContent = score.toLocaleString();
         if (hud.level) hud.level.textContent = `${levelNum}/${maxLevel}`;
         if (hud.tensionFill) hud.tensionFill.style.width = `${Math.min(100, tension)}%`;
         if (hud.tensionValue) hud.tensionValue.textContent = Math.round(tension);
+
+        const vig = document.getElementById('tension-vignette');
+        if (vig) {
+            if (tension >= 86) vig.classList.add('visible');
+            else vig.classList.remove('visible');
+        }
     }
 
     // ── Level Complete ─────────────────────────────────────
@@ -194,8 +249,21 @@ const UI = (() => {
         const lcBtn = document.getElementById('btn-next-level');
 
         if (lcLevel) lcLevel.textContent = `Level ${level} Complete!`;
-        if (lcScore) lcScore.textContent = `Score: ${score.toLocaleString()}`;
-        if (lcPlayer) lcPlayer.textContent = `Pilot: ${window.PlayerStats?.getPlayerName?.() || 'Pilot'}`;
+        if (lcScore) {
+            lcScore.textContent = `Score: 0`;
+            let current = 0;
+            const inc = Math.max(1, Math.floor(score / 30));
+            const timer = setInterval(() => {
+                current += inc;
+                if (current >= score) {
+                    current = score;
+                    clearInterval(timer);
+                }
+                lcScore.textContent = `Score: ${current.toLocaleString()}`;
+            }, 30);
+        }
+        if (lcPlayer) lcPlayer.textContent = `Pilot: ${window.PlayerStats?.getPlayerName?.() || 'Unknown Pilot'}`;
+        if (navigator.vibrate) navigator.vibrate(200);
 
         if (lcBtn) {
             const newBtn = lcBtn.cloneNode(true);
@@ -234,9 +302,14 @@ const UI = (() => {
         const endPlayer = document.getElementById('ending-player');
         const endBtn = document.getElementById('btn-play-again');
 
-        if (endText) typeWriter(endText, text, 50);
+        if (endText) {
+            endText.innerHTML = '';
+            // It might be formatted with newlines, replace with br
+            const formatted = text.replace(/\n/g, '<br/>');
+            endText.innerHTML = formatted;
+        }
         if (endScore) endScore.textContent = `Final Score: ${score.toLocaleString()}`;
-        if (endPlayer) endPlayer.textContent = `Pilot: ${window.PlayerStats?.getPlayerName?.() || 'Pilot'}`;
+        if (endPlayer) endPlayer.textContent = `Pilot: ${window.PlayerStats?.getPlayerName?.() || 'Unknown Pilot'}`;
         refreshLeaderboards();
 
         if (endBtn) {
@@ -249,7 +322,7 @@ const UI = (() => {
     }
 
     function setPlayerName(name) {
-        const safe = String(name || 'Pilot').trim() || 'Pilot';
+        const safe = String(name || 'Unknown Pilot').trim() || 'Unknown Pilot';
         const hudPlayer = document.getElementById('hud-player');
         const playerTag = document.getElementById('player-name-tag');
         const input = document.getElementById('username-input');

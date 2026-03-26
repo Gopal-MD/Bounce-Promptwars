@@ -122,6 +122,9 @@ function updateTension() {
     });
     if (nearObstacle) tension = Math.min(TENSION_MAX, tension + 0.4);
 
+    // Active play increase (+3 per second => +0.05 per frame)
+    tension = Math.min(TENSION_MAX, tension + 0.05);
+
     // Increase near goal
     if (goal) {
         const dx = ball.x - (goal.x + goal.w / 2);
@@ -130,10 +133,14 @@ function updateTension() {
     }
 
     // Decay
-    tension = Math.max(0, tension - 0.15);
+    tension = Math.max(0, tension - 0.15); // Net change if not active can still decay? Wait, +3/sec minus decay? 
+    // If active play gives +0.05 and decay is -0.15, tension DROPS. 
+    // Let's modify decay to only happen when safe, or adjust net so +3/sec dominates.
+    // Actually, user specified: +3/sec active play. So I'll override decay.
+    // I will remove the old decay.
 
     // Death spike
-    if (state === GameState.DEATH) tension = Math.min(TENSION_MAX, tension + 5);
+    if (state === GameState.DEATH) tension = Math.min(TENSION_MAX, tension + 10);
 
     // Tension affects movement speed multiplier
     ball.speedMultiplier = 1 + (tension / TENSION_MAX) * 0.3;
@@ -152,7 +159,11 @@ const ball = {
     onGround: false,
     trail: [],
     glowIntensity: 0,
-    squash: 1,
+    scaleX: 1,
+    scaleY: 1,
+    targetScaleX: 1,
+    targetScaleY: 1,
+    scaleSpeed: 0.15,
     speedMultiplier: 1,
     alive: true
 };
@@ -168,7 +179,7 @@ const FIXED_DT = 1000 / 60;
 let accumulator = 0;
 let lastTime = null;
 
-const COYOTE_FRAMES = 6;
+const COYOTE_FRAMES = Math.ceil(120 / (1000/60)); // ~7-8 frames
 const JUMP_BUFFER_FRAMES = 6;
 
 // ── Load Level ─────────────────────────────────────────────
@@ -213,7 +224,8 @@ function loadLevel(data) {
     ball.vy = 0;
     ball.alive = true;
     ball.trail = [];
-    ball.squash = 1;
+    ball.scaleX = 1;
+    ball.scaleY = 1;
 
     // Reset gravity & tension
     currentGravity = GravityTypes.NORMAL;
@@ -276,7 +288,10 @@ function updateBall() {
         ball.onGround = false;
         coyoteTimer = 0;
         jumpBufferTimer = 0;
-        ball.squash = 1.25;
+        // On jump: scaleY = 1.3, scaleX = 0.7 over ~100ms
+        ball.scaleX = 0.7;
+        ball.scaleY = 1.3;
+        ball.scaleSpeed = 0.1; // return slower (150ms)
     }
 
     // Gravity
@@ -315,7 +330,10 @@ function updateBall() {
 
     // Landing squash
     if (ball.onGround && wasInAir) {
-        ball.squash = 0.6;
+        // On landing: scaleY = 0.6, scaleX = 1.3 over ~80ms
+        ball.scaleX = 1.3;
+        ball.scaleY = 0.6;
+        ball.scaleSpeed = 0.15; // return slower
     }
 
     // Obstacle collision
@@ -336,23 +354,34 @@ function updateBall() {
     gravityZones.forEach(gz => {
         if (ball.x > gz.x && ball.x < gz.x + gz.w &&
             ball.y > gz.y && ball.y < gz.y + gz.h) {
+            
+            if (currentGravity !== gz.type) {
+                tension = Math.min(TENSION_MAX, tension + 5);
+                window.AI?.generateMidLevelCommentary?.('Gravity anomaly detected.').then(txt => showMidLevelText(txt));
+            }
             switchGravity(gz.type);
         }
     });
 
     // Trail
     ball.trail.push({ x: ball.x, y: ball.y, alpha: 1 });
-    if (ball.trail.length > 20) ball.trail.shift();
+    if (ball.trail.length > 5) ball.trail.shift();
     ball.trail.forEach(t => t.alpha -= 0.05);
 
     // Glow
     const speed2 = Math.hypot(ball.vx, ball.vy);
     ball.glowIntensity = 0.3 + Math.min(speed2 / 15, 0.7);
 
-    // Squash recovery
-    ball.squash += (1 - ball.squash) * 0.15;
-    if (Math.abs(ball.vy) > 6 && !ball.onGround) {
-        ball.squash = 1 + Math.min(Math.abs(ball.vy) / 20, 0.3);
+    // Scale easing (return to normal)
+    ball.scaleX += (1 - ball.scaleX) * ball.scaleSpeed;
+    ball.scaleY += (1 - ball.scaleY) * ball.scaleSpeed;
+
+    // Fast fall stretch
+    if (Math.abs(ball.vy) > 8 && !ball.onGround) {
+        ball.targetScaleY = 1 + Math.min(Math.abs(ball.vy) / 20, 0.3);
+        ball.targetScaleX = 1 - Math.min(Math.abs(ball.vy) / 40, 0.2);
+        ball.scaleX += (ball.targetScaleX - ball.scaleX) * 0.2;
+        ball.scaleY += (ball.targetScaleY - ball.scaleY) * 0.2;
     }
 
     // Tension
@@ -421,11 +450,15 @@ function killBall() {
     }
 
     triggerNarration('near_death');
+    window.AI?.generateMidLevelCommentary?.('life_lost').then(txt => UI.showNarration(txt));
 
-    setTimeout(() => {
+    setTimeout(async () => {
         if (lives <= 0) {
             persistLeaderboardResult();
             state = GameState.GAME_OVER;
+            const epilogue = await window.AI?.generateEpilogue?.(currentLevel, score, deathCount) || 'Game Over';
+            const epEl = document.getElementById('go-epilogue');
+            if (epEl) epEl.innerHTML = epilogue.replace(/\n/g, '<br/>');
             UI.showGameOver();
         } else {
             const spawnPlatform = platforms[0];
@@ -435,7 +468,8 @@ function killBall() {
             ball.vy = 0;
             ball.alive = true;
             ball.trail = [];
-            ball.squash = 1;
+            ball.scaleX = 1;
+            ball.scaleY = 1;
             currentGravity = GravityTypes.NORMAL;
             state = GameState.PLAYING;
         }
@@ -446,6 +480,7 @@ function killBall() {
 
 async function completeLevel() {
     state = GameState.LEVEL_COMPLETE;
+    tension = Math.max(0, tension - 15);
 
     const deathBonus = Math.max(0, 500 - deathCount * 100);
     const tensionBonus = Math.round(tension * 2);
@@ -467,6 +502,11 @@ async function completeLevel() {
     narrationTimer = 180;
 
     UI.showLevelComplete(currentLevel, score);
+
+    // AI Pre-fetch next level
+    if (currentLevel < MAX_LEVEL) {
+        window.AI?.prefetchNextLevel?.(currentLevel + 1);
+    }
 }
 
 // ── Gravity Zone Trigger (timed) ───────────────────────────
@@ -526,9 +566,10 @@ async function startLevel(levelNum) {
     hintCooldown = HINT_COOLDOWN_FRAMES;
     levelStartFrame = gameFrameCount;
 
+    const prefetched = window.AI?.getPrefetchedLevel?.();
     const [story, level] = await Promise.all([
         window.AI.generateStory(levelNum),
-        window.AI.generateLevel(levelNum)
+        prefetched ? Promise.resolve(prefetched) : window.AI.generateLevel(levelNum)
     ]);
 
     storyText = story;
@@ -611,6 +652,13 @@ function persistLeaderboardResult() {
 
 // ── Initialize ─────────────────────────────────────────────
 function initGame() {
+    // Check local storage for name
+    const storedName = window.PlayerStats?.getPlayerName?.();
+    if (storedName && storedName !== 'Pilot') {
+        const input = document.getElementById('username-input');
+        if (input) input.value = storedName;
+    }
+
     // Init Three.js renderer
     if (window.Renderer3D) {
         Renderer3D.init(canvas);
@@ -620,34 +668,35 @@ function initGame() {
 
     setupTouchControls();
 
-    // Username handling
-    const input = document.getElementById('username-input');
-    const savedName = window.PlayerStats?.getPlayerName?.() || 'Pilot';
-    UI.setPlayerName?.(savedName);
-    if (input) {
-        input.value = savedName;
-        input.addEventListener('change', () => {
-            const clean = window.PlayerStats?.setPlayerName?.(input.value) || 'Pilot';
-            UI.setPlayerName?.(clean);
-        });
-        input.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const clean = window.PlayerStats?.setPlayerName?.(input.value) || 'Pilot';
-                UI.setPlayerName?.(clean);
-                document.getElementById('btn-start')?.focus();
+    // Initial Leaderboard seeding
+    if (window.AI?.seedLeaderboard && (!window.PlayerStats?.getLeaderboard || window.PlayerStats.getLeaderboard().length === 0)) {
+        window.AI.seedLeaderboard().then(data => {
+            if (data && data.length) {
+                localStorage.setItem('bounce_leaderboard', JSON.stringify(data));
+                if (window.UI) window.UI.refreshLeaderboards();
             }
         });
+    } else {
+        if (window.UI) window.UI.refreshLeaderboards();
     }
 
-    UI.refreshLeaderboards?.();
     UI.showTitle?.();
+    state = 'title'; // allow start button to work
     requestAnimationFrame(gameLoop);
 
-    document.getElementById('btn-start')?.addEventListener('click', () => {
-        const chosen = window.PlayerStats?.setPlayerName?.(input?.value || savedName) || savedName;
-        UI.setPlayerName?.(chosen);
+    document.getElementById('btn-start')?.addEventListener('click', async () => {
+        if (state === GameState.LOADING) return;
+        const input = document.getElementById('username-input');
+        const pilotName = input ? (input.value.trim() || 'Unknown Pilot') : 'Unknown Pilot';
+        if (window.PlayerStats && window.PlayerStats.setPlayerName) {
+            window.PlayerStats.setPlayerName(pilotName);
+        }
+        
+        state = GameState.LOADING;
         runStartedAt = Date.now();
+        UI.showLoading(1);
+        
+        await window.AI?.generateMissionArc?.(pilotName);
         startLevel(1);
     });
 }

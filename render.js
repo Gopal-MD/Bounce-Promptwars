@@ -11,6 +11,12 @@ const Renderer3D = (() => {
     let obstacleMeshes = [];
     let gravityParticles = [];
     let ambientLight, dirLight, pointLight;
+    let ghostMeshes = [];
+    let simplex = null;
+
+    if (typeof SimplexNoise !== 'undefined') {
+        simplex = new SimplexNoise();
+    }
 
     // Dimensions match our logical play area
     const W = 800, H = 580;
@@ -105,7 +111,7 @@ const Renderer3D = (() => {
         scene.add(plane);
     }
 
-    // ── Ball ───────────────────────────────────────────────
+    // ── Ball & Ghosts ──────────────────────────────────────
     function createBall() {
         const geom = new THREE.SphereGeometry(12, 32, 32);
         const mat = new THREE.MeshPhongMaterial({
@@ -119,6 +125,19 @@ const Renderer3D = (() => {
         ballMesh.castShadow = true;
         ballMesh.position.set(50, H - 50, 15); // Z = 15 for depth
         scene.add(ballMesh);
+
+        // Motion trail ghosts
+        for (let i = 0; i < 5; i++) {
+            const ghostMat = new THREE.MeshPhongMaterial({
+                color: 0x4fc3f7,
+                emissive: 0x1a6fa0,
+                transparent: true,
+                opacity: 0
+            });
+            const ghost = new THREE.Mesh(geom, ghostMat);
+            scene.add(ghost);
+            ghostMeshes.push(ghost);
+        }
     }
 
     // ── Build Level Geometry ───────────────────────────────
@@ -212,16 +231,34 @@ const Renderer3D = (() => {
             ballMesh.position.z = 15 + Math.sin(t * 3) * 2; // subtle bob
 
             // Squash & stretch
-            const sx = 1 / (ballState.squash || 1);
-            const sy = ballState.squash || 1;
+            const sx = ballState.scaleX || 1;
+            const sy = ballState.scaleY || 1;
             ballMesh.scale.set(sx, sy, 1);
 
             // Glow intensity based on speed
             const speed = Math.hypot(ballState.vx || 0, ballState.vy || 0);
             const emInt = 0.3 + Math.min(speed / 20, 0.7);
             ballMesh.material.emissiveIntensity = emInt;
+
+            // Motion Trail Update
+            const trailCount = tension > 60 ? 5 : (tension > 30 ? 3 : 1);
+            ghostMeshes.forEach((ghost, i) => {
+                if (ballState.trail && i < ballState.trail.length && i < trailCount) {
+                    const tData = ballState.trail[i];
+                    ghost.position.set(tData.x, H - tData.y, 15);
+                    ghost.visible = true;
+                    // Fading opacity (0.3 -> 0)
+                    ghost.material.opacity = 0.3 * (1 - (i / 5)) * (tData.alpha || 1);
+                    ghost.material.color.copy(ballMesh.material.color);
+                    ghost.material.emissive.copy(ballMesh.material.emissive);
+                } else {
+                    ghost.visible = false;
+                }
+            });
+
         } else {
             ballMesh.visible = false;
+            ghostMeshes.forEach(g => g.visible = false);
         }
 
         // Update platform positions (for moving platforms)
@@ -270,6 +307,15 @@ const Renderer3D = (() => {
         // Camera slight sway
         camera.position.x = W / 2 + Math.sin(t * 0.3) * 8;
         camera.position.y = H / 2 + Math.cos(t * 0.2) * 5;
+
+        // Tension Camera Shake (Simplex Noise max 0.05) if tension > 60
+        if (tension > 60 && simplex) {
+            const shakeAmt = tension > 85 ? 0.05 : 0.02;
+            const sx = simplex.noise2D(t * 10, 0) * shakeAmt * W;
+            const sy = simplex.noise2D(0, t * 10) * shakeAmt * H;
+            camera.position.x += sx;
+            camera.position.y += sy;
+        }
 
         renderer.render(scene, camera);
     }
@@ -359,10 +405,8 @@ const Renderer3D = (() => {
     // ── Resize Handler ─────────────────────────────────────
     function resize() {
         if (!renderer) return;
-        const wrapper = document.getElementById('canvas-wrapper');
-        if (!wrapper) return;
-        const w = wrapper.clientWidth;
-        const h = wrapper.clientHeight;
+        const w = window.innerWidth;
+        const h = window.innerHeight;
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
         renderer.setSize(w, h);

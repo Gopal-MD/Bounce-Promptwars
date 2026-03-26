@@ -303,15 +303,25 @@ const FALLBACK_HINTS = [
     ['Look up — the path continues higher.', 'A gravity zone halfway up changes everything.', '1. Climb the left staircase.\n2. Use the gravity zone to your advantage.\n3. Jump to the goal at the top.']
 ];
 
+// ── Continuous Narrative Storage ──────────────────────────
+let missionArc = null;
+let nextLevelBuffer = null;
+
 // ── API Call ──────────────────────────────────────────────
 async function callGemini(prompt, retries = 2) {
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout
+
             const response = await fetch(GEMINI_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt })
+                body: JSON.stringify({ prompt }),
+                signal: controller.signal
             });
+
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 console.warn(`Gemini API ${response.status} (attempt ${attempt + 1})`);
@@ -444,6 +454,98 @@ async function generateHint(levelNumber, hintTier) {
     return FALLBACK_HINTS[idx][tier];
 }
 
+// ── New AI Narrative Methods ──────────────────────────────
+async function generateMissionArc(pilotName) {
+    const prompt = `Generate a sci-fi mission arc for a game pilot named ${pilotName} who must navigate a broken gravity world.
+Return a structured plain JSON object with no markdown fences, no extra text.
+Format:
+{
+  "pilot": "${pilotName}",
+  "world": "short world description",
+  "enemy": "name of enemy or force",
+  "goal": "short final objective",
+  "chapters": [10 short single-sentence chapter hooks]
+}`;
+
+    const response = await callGemini(prompt);
+    if (response) {
+        try {
+            let jsonStr = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            const arc = JSON.parse(jsonStr);
+            if (arc.chapters && arc.chapters.length === 10) {
+                missionArc = arc;
+                return arc;
+            }
+        } catch (e) { console.warn('Mission arc parsing failed', e); }
+    }
+    // Fallback
+    missionArc = {
+        pilot: pilotName,
+        world: "The Fractured Dimension",
+        enemy: "The Void Core",
+        goal: "Restore gravity to the universe.",
+        chapters: FALLBACK_STORIES
+    };
+    return missionArc;
+}
+
+function getLevelBriefing(levelIndex) {
+    if (!missionArc) return FALLBACK_STORIES[levelIndex % FALLBACK_STORIES.length];
+    return missionArc.chapters[levelIndex % missionArc.chapters.length];
+}
+
+async function generateMidLevelCommentary(event) {
+    // events: 'gravity_zone', 'all_stars', 'life_lost'
+    const prompt = `Write a short glowing 1-line in-game commentary (max 8 words) for when the player: ${event}. Keep it cinematic. Output plain text only.`;
+    const response = await callGemini(prompt);
+    if (response) return response.replace(/^["']|["']$/g, '').trim();
+    return event === 'life_lost' ? "System failure. Rerouting..." : "Gravity anomaly detected.";
+}
+
+async function generateEpilogue(level, score, deaths) {
+    const prompt = `Write a 4-sentence cinematic game-over epilogue for a pilot who reached level ${level}, scored ${score}, but died ${deaths} times. Plain text only, no markdown.`;
+    const response = await callGemini(prompt);
+    if (response) return response.trim();
+    return `The journey ends at level ${level}.\nThe void takes another soul.\nA score of ${score} will echo in eternity.\nBut the fracture remains.`;
+}
+
+async function generateWinEnding(pilotName) {
+    const arcInfo = missionArc ? \`They defeated \${missionArc.enemy} to \${missionArc.goal}.\` : '';
+    const prompt = \`Write a triumphant 4-sentence cinematic ending for pilot \${pilotName}. \${arcInfo} Plain text only, no markdown, no placeholders.\`;
+    const response = await callGemini(prompt);
+    if (response) return response.trim();
+    return \`Mission accomplished, \${pilotName}.\nThe gravity anchors are stable.\nThe void has been sealed forever.\nYou are the true legend of the fracture.\`;
+}
+
+async function seedLeaderboard() {
+    const prompt = \`Generate 8 random sci-fi pilot names with scores between 5000 and 20000, and levels between 3 and 10. Format as JSON array of objects: [{"name": string, "score": number, "level": number}]. Return plain JSON only.\`;
+    const response = await callGemini(prompt);
+    if (response) {
+        try {
+            let jsonStr = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            return JSON.parse(jsonStr);
+        } catch(e) {}
+    }
+    return [
+        {name: "Vanguard", score: 18500, level: 10},
+        {name: "Zeta-9", score: 14200, level: 8},
+        {name: "Nova", score: 12050, level: 7},
+        {name: "Echo", score: 9800, level: 5},
+        {name: "Tether", score: 8100, level: 4},
+        {name: "Drifter", score: 7500, level: 4},
+        {name: "Quark", score: 6200, level: 3},
+        {name: "Ripley", score: 5100, level: 3}
+    ];
+}
+
+async function prefetchNextLevel(levelNumber) {
+    nextLevelBuffer = await generateLevel(levelNumber);
+}
+
+function getPrefetchedLevel() {
+    return nextLevelBuffer;
+}
+
 // ── TTS (disabled) ────────────────────────────────────────
 function speakText(text) { /* disabled */ }
 
@@ -451,10 +553,16 @@ function speakText(text) { /* disabled */ }
 if (typeof window !== 'undefined') {
     window.AI = {
         generateLevel,
-        generateStory,
+        generateStory: async (l) => getLevelBriefing(l - 1),
         generateNarration,
-        generateEnding,
+        generateEnding: generateWinEnding,
         generateHint,
+        generateMissionArc,
+        generateMidLevelCommentary,
+        generateEpilogue,
+        seedLeaderboard,
+        prefetchNextLevel,
+        getPrefetchedLevel,
         speakText,
         _callGemini: callGemini,
         FALLBACK_LEVELS,

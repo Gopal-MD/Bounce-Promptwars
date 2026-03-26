@@ -9,6 +9,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪐</text></svg>">
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
 </head>
 <body>
 
@@ -25,19 +26,25 @@
 
             <!-- ═══ Title Screen ═══ -->
             <div id="screen-title" class="screen-overlay active">
+                <div id="cinematic-intro" class="cinematic-intro">
+                    <p class="intro-line">The physics engine has collapsed.</p>
+                    <p class="intro-line">Gravity is no longer a constant.</p>
+                    <p class="intro-line">We need a steady pilot.</p>
+                </div>
+                
                 <div class="title-logo">BOUNCE TALES</div>
                 <p class="title-tagline">Gravity Shift · Smart 3D AI Edition</p>
                 <div class="feature-list">
                     <span class="feature-tag cyan">Smart 3D</span>
                     <span class="feature-tag purple">Anti-Gravity</span>
-                    <span class="feature-tag pink">AI Levels</span>
-                    <span class="feature-tag orange">AI Story</span>
-                    <span class="feature-tag green">Tension System</span>
+                    <span class="feature-tag pink">AI Narrative</span>
+                    <span class="feature-tag orange">Haptics</span>
+                    <span class="feature-tag green">Tension Sys</span>
                 </div>
 
                 <!-- Username Input -->
                 <div class="username-section">
-                    <input type="text" id="username-input" class="username-input" placeholder="Enter Pilot Name..." maxlength="15" autocomplete="off" spellcheck="false">
+                    <input type="text" id="username-input" class="username-input" placeholder="Unknown Pilot" maxlength="15" autocomplete="off" spellcheck="false">
                 </div>
 
                 <button id="btn-start" class="btn-primary">Launch Game</button>
@@ -97,6 +104,7 @@
             <div id="screen-game-over" class="screen-overlay">
                 <div class="go-icon">💀</div>
                 <h2 class="go-title">Game Over</h2>
+                <p id="go-epilogue" class="cinematic-text"></p>
                 <p id="go-score">Final Score: 0</p>
                 <p id="go-player" class="go-player"></p>
                 <!-- Mini leaderboard on game over -->
@@ -110,8 +118,8 @@
             <!-- ═══ Ending Screen ═══ -->
             <div id="screen-ending" class="screen-overlay">
                 <div class="ending-icon">🌌</div>
-                <h2 class="ending-title">You Escaped the Fracture</h2>
-                <p id="ending-text"></p>
+                <h2 class="ending-title">Mission Accomplished</h2>
+                <div id="ending-text" class="cinematic-text"></div>
                 <p id="ending-score"></p>
                 <p id="ending-player" class="ending-player"></p>
                 <!-- Mini leaderboard on ending -->
@@ -124,6 +132,9 @@
 
             <!-- Narration Overlay -->
             <div id="narration-bar" class="narration-bar hidden"></div>
+            
+            <!-- Vignette Overlay -->
+            <div id="tension-vignette" class="tension-vignette hidden"></div>
         </div>
 
         <!-- HUD Bar -->
