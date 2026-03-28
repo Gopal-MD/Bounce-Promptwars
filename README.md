@@ -1,107 +1,88 @@
-# Bounce Classic: Physics Rewritten (AI Edition)
+# Bounce Tales: Gravity Shift - Smart 3D AI Edition
 
-A 2D canvas platformer inspired by Nokia Bounce, reimagined with Gemini-powered content generation.
+A web-based 3D platformer featuring AI-driven storytelling and dynamic anti-gravity physics.
 
-## What It Is
+## Overview
 
-- 2D platformer with fixed 800x580 play area
-- AI-generated levels, story text, event narration, and ending text
-- Adaptive difficulty based on player performance
-- Progressive AI coach hints for stuck players
-- Mobile touch controls + keyboard controls
+Bounce Tales: Gravity Shift is an interactive web-based game that fuses classic platforming mechanics with modern generative AI. By leveraging generative models, the game breaks away from static level design by dynamically altering the physics environment (such as gravity and tension) and generating real-time narratives based on player performance. 
 
-## Core Features
+## Problem Statement
 
-- Gemini Level Generation
-   - Generates JSON level layouts with platforms, obstacles, and goal placement
-   - Falls back to handcrafted levels if AI or parsing fails
-- Adaptive Difficulty
-   - Tracks recent performance (deaths, obstacle hits, clear times)
-   - Adjusts upcoming level prompt: ease, maintain, or challenge
-- AI Story and Narration
-   - Story briefing shown before each level
-   - Dynamic narration for near-death and level-complete moments
-- AI Coach Hints
-   - Hint button unlocks after a cooldown
-   - 3-tier hint progression (gentle -> tactical -> step-by-step)
-- Resilience
-   - Fallback stories, narrations, endings, and hints keep gameplay running offline/API-down
+Traditional web-based platformers suffer from static environments and predictable outcomes. They lack the replayability that comes from adaptive difficulty and fail to engage players with unique, personalized narrative elements that respond directly to their gameplay actions.
 
-## Controls
+## Solution
 
-- Desktop
-   - Left/Right arrows or A/D: move
-   - Up arrow, W, or Space: jump
-- Mobile
-   - On-screen left/right/jump buttons
+We developed a 2.5D game architecture that utilizes a sophisticated artificial intelligence integration to act as an active "Game Master." The Gemini API dynamically monitors the player's session and modifies the game's physical rules (like gravity and tension parameters) on the fly, while weaving a responsive, real-time narrative layer.
 
-## Project Structure
+## Features
 
-```text
-PromptWars/
-   index.html              # App shell and overlays
-   style.css               # Visual design and HUD styling
-   game.js                 # Physics, game loop, states, collisions
-   ui.js                   # Screen transitions, HUD, hint toast
-   ai.js                   # Gemini calls, generation logic, fallbacks
-   playerStats.js          # Adaptive difficulty tracking and scoring
-   api/generateContent.js  # Vercel serverless Gemini proxy
-   vercel.json             # Vercel routing/config
-   package.json            # Project metadata
-```
+- Smart 3D illusion using Three.js
+- Anti-gravity physics system
+- AI-generated story using Gemini API
+- Dynamic tension-based gameplay
+- Responsive web controls
 
-## Run Locally
+## Tech Stack
 
-This project is plain HTML/CSS/JS. You can run it with any static server.
+- HTML, CSS, JavaScript
+- Three.js
+- Node.js (Express)
+- Google Cloud Run
+- Gemini API
 
-1. Start a local server from project root.
+## Google Services Used
 
-```bash
-python -m http.server 8000
-```
+- Gemini API (AI generation)
+- Cloud Run (deployment)
 
-2. Open:
+## How It Works
 
-```text
-http://localhost:8000
-```
+### Game Loop
+The application runs on a continuous vanilla JavaScript `requestAnimationFrame` loop, synchronizing a custom 2D physics engine with an abstracted Three.js 3D rendering layer. This approach ensures highly performant logic while maintaining the 3D perspective illusion.
 
-Note: AI requests go to /api/generateContent. That endpoint is available on Vercel deployment, not from Python static server alone.
+### AI Integration
+The Express backend securely proxies requests to the Gemini API. During gameplay, telemetry data (such as player deaths, score, and tension) is sent to the model. The API returns JSON-structured payload modifiers that trigger narrative dialogue displays and alter the state of the active level.
 
-## Deploy to Vercel
+### Gravity System
+State-driven physics modifiers dynamically alter the directional pull of gravity in the game engine. Available gravity permutations include Reverse, Lateral, Zero-G, and Pulse states. The physics engine recalculates momentum and collision boundaries in real-time based on the current active gravity state.
 
-1. Install and log in to Vercel CLI:
+## Setup Instructions
 
-```bash
-npm install -g vercel
-vercel login
-```
+To run this project locally, follow these steps:
 
-2. Deploy:
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/YourUsername/Bounce-Promptwars.git
+   cd Bounce-Promptwars
+   ```
 
-```bash
-vercel --prod
-```
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-3. In Vercel dashboard, set environment variable:
+3. **Configure environment variables**
+   Create a `.env` file in the root directory and add your Google Gemini API key:
+   ```env
+   GEMINI_API_KEY=your_actual_api_key_here
+   ```
 
-- Name: GEMINI_API_KEY
-- Value: your Gemini API key
+4. **Run locally**
+   ```bash
+   npm start
+   ```
+   The application will start the Express server internally and will be available on `http://localhost:8080`.
 
-4. Redeploy after adding variables:
+## Live Demo
 
-```bash
-vercel --prod
-```
+**Cloud Run Deployment Link:** [https://bounce-connection-766171890128.asia-south1.run.app](https://bounce-connection-766171890128.asia-south1.run.app)
 
-## Security Note
+## Future Improvements
 
-Do not commit real API keys. Keep GEMINI_API_KEY only in environment variables on Vercel.
+- Implementation of multi-player leaderboard sync via database persistence.
+- Expansion of the Three.js rendering library to support fully rigged 3D models and advanced lighting shaders.
+- Introducing a more complex dialogue tree memory so the Gemini API remembers past playthrough sessions natively.
 
-## Tech
+## Conclusion
 
-- HTML5 Canvas 2D
-- Vanilla JavaScript
-- Web APIs (Speech synthesis hook present, currently disabled)
-- Google Gemini API (via serverless proxy)
-- Vercel Serverless Functions
+Bounce Tales: Gravity Shift showcases the potential of intertwining generative AI models with real-time web application environments. By utilizing the Gemini API and Google Cloud Run, we have successfully created a dynamic, scalable application that rethinks how static physics engines can become adaptive layers controlled entirely by AI.
