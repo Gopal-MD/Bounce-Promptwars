@@ -7,12 +7,28 @@
     <title>Bounce Tales: Gravity Shift — Smart 3D AI Edition</title>
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪐</text></svg>">
+    <!-- Firebase Web SDKs for Analytics and Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-analytics.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDnUgRz5YzrZ9mKKCz5Yz5XyZ0DvZ9Yz",
+            authDomain: "bounce-connection.firebaseapp.com",
+            projectId: "bounce-connection",
+            storageBucket: "bounce-connection.appspot.com",
+            messagingSenderId: "766171890128",
+            appId: "1:766171890128:web:d8c5d5e5d5d5d5d5d5d5d5"
+        };
+        firebase.initializeApp(firebaseConfig);
+        firebase.analytics();
+    </script>
 </head>
 <body>
 
-    <div id="game-container">
+    <main id="game-container" role="main" aria-label="Bounce Tales game container">
         <!-- Header -->
-        <header class="game-header">
+        <header class="game-header" role="banner" aria-label="Game header with title">
             <h1 class="game-title">Bounce Tales</h1>
             <p class="game-subtitle">Gravity Shift · Smart 3D AI Edition</p>
         </header>
@@ -44,7 +60,7 @@
                     <input type="text" id="username-input" class="username-input" placeholder="Unknown Pilot" maxlength="15" autocomplete="off" spellcheck="false">
                 </div>
 
-                <button id="btn-start" class="btn-primary">Launch Game</button>
+                <button id="btn-start" class="btn-primary" aria-label="Start Game" tabindex="0">Launch Game</button>
 
                 <!-- Leaderboard on Title -->
                 <div id="leaderboard-title" class="leaderboard-panel">
@@ -65,13 +81,13 @@
             <div id="screen-story" class="screen-overlay">
                 <span class="story-level-label">— Level Briefing —</span>
                 <h2 id="story-level-name"></h2>
-                <p id="story-text"></p>
+                <p id="story-text" aria-live="polite" role="status"></p>
                 <div class="story-meta">
                     <span id="story-difficulty" class="difficulty-badge diff-medium"></span>
                     <span id="story-gravity" class="gravity-badge"></span>
                 </div>
                 <p id="story-adaptive-msg" class="adaptive-notice"></p>
-                <button id="btn-story-continue" class="btn-primary" style="margin-top: 16px;">Enter Level</button>
+                <button id="btn-story-continue" class="btn-primary" aria-label="Enter Level" tabindex="0" style="margin-top: 16px;">Enter Level</button>
             </div>
 
             <!-- ═══ Gameplay HUD (transparent overlay) ═══ -->
@@ -84,7 +100,7 @@
                 <!-- Player Name Tag -->
                 <div id="player-name-tag" class="player-name-tag"></div>
                 <!-- Hint Button -->
-                <button id="btn-hint" class="hint-btn">💡 Hint</button>
+                <button id="btn-hint" class="hint-btn" aria-label="Get hint" tabindex="0">💡 Hint</button>
                 <div id="hint-toast" class="hint-toast hidden"></div>
             </div>
 
@@ -94,7 +110,7 @@
                 <h2 id="lc-level">Level Complete!</h2>
                 <p id="lc-score">Score: 0</p>
                 <p id="lc-player" class="lc-player"></p>
-                <button id="btn-next-level" class="btn-primary">Next Level</button>
+                <button id="btn-next-level" class="btn-primary" aria-label="Continue to Next Level" tabindex="0">Next Level</button>
             </div>
 
             <!-- ═══ Game Over Screen ═══ -->
@@ -109,7 +125,7 @@
                     <h3 class="leaderboard-heading">🏆 Top Pilots</h3>
                     <ol id="leaderboard-list-gameover" class="leaderboard-list"></ol>
                 </div>
-                <button id="btn-restart" class="btn-primary" style="margin-top:12px;">Try Again</button>
+                <button id="btn-restart" class="btn-primary" aria-label="Restart game" tabindex="0" style="margin-top:12px;">Try Again</button>
             </div>
 
             <!-- ═══ Ending Screen ═══ -->
@@ -124,11 +140,11 @@
                     <h3 class="leaderboard-heading">🏆 Gravity Legends</h3>
                     <ol id="leaderboard-list-ending" class="leaderboard-list"></ol>
                 </div>
-                <button id="btn-play-again" class="btn-primary" style="margin-top: 10px;">Play Again</button>
+                <button id="btn-play-again" class="btn-primary" aria-label="Play Again" tabindex="0" style="margin-top: 10px;">Play Again</button>
             </div>
 
             <!-- Narration Overlay -->
-            <div id="narration-bar" class="narration-bar hidden"></div>
+            <div id="narration-bar" class="narration-bar hidden" aria-live="assertive" role="status" aria-label="Narration"></div>
             
             <!-- Vignette Overlay -->
             <div id="tension-vignette" class="tension-vignette hidden"></div>
@@ -176,14 +192,12 @@
         </div>
 
         <!-- Footer -->
-        <footer class="game-footer">
+        <footer class="game-footer" role="contentinfo">
             Offline gameplay mode enabled
         </footer>
-    </div>
+    </main>
 
-    <!-- Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <!-- Libraries (Three.js and Simplex-noise removed - offline 2D canvas mode) -->
 
     <!-- Scripts (order matters) -->
     <script src="playerStats.js"></script>
