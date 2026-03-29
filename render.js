@@ -30,7 +30,7 @@ const Renderer3D = (() => {
 
         // Camera: tilted perspective for 2.5D depth illusion
         camera = new THREE.PerspectiveCamera(50, W / H, 1, 2000);
-        camera.position.set(W / 2, H / 2, 700);
+        camera.position.set(W / 2, H / 2, 850);
         camera.lookAt(W / 2, H / 2, 0);
 
         // Renderer
@@ -89,8 +89,7 @@ const Renderer3D = (() => {
         const mat = new THREE.PointsMaterial({
             color: 0xffffff,
             size: 1.5,
-            transparent: true,
-            opacity: 0.6
+            transparent: false, opacity: 1
         });
         scene.add(new THREE.Points(geom, mat));
     }
@@ -100,8 +99,7 @@ const Renderer3D = (() => {
         const geom = new THREE.PlaneGeometry(W * 1.2, H * 1.2);
         const mat = new THREE.MeshStandardMaterial({
             color: 0x0a0e27,
-            transparent: true,
-            opacity: 0.5,
+            transparent: false, opacity: 1,
             roughness: 0.9,
             metalness: 0.1
         });
@@ -131,8 +129,7 @@ const Renderer3D = (() => {
             const ghostMat = new THREE.MeshPhongMaterial({
                 color: 0x4fc3f7,
                 emissive: 0x1a6fa0,
-                transparent: true,
-                opacity: 0
+                transparent: false, opacity: 1
             });
             const ghost = new THREE.Mesh(geom, ghostMat);
             scene.add(ghost);
@@ -157,8 +154,7 @@ const Renderer3D = (() => {
                 emissive: 0x0d7a5f,
                 emissiveIntensity: 0.2,
                 shininess: 60,
-                transparent: true,
-                opacity: 0.85
+                transparent: false, opacity: 1
             });
             const mesh = new THREE.Mesh(geom, mat);
             // Convert from top-left (2D) to center (Three.js)
@@ -208,8 +204,7 @@ const Renderer3D = (() => {
                 emissive: 0x2e7d32,
                 emissiveIntensity: 0.6,
                 shininess: 120,
-                transparent: true,
-                opacity: 0.9
+                transparent: false, opacity: 1
             });
             goalMesh = new THREE.Mesh(geom, mat);
             goalMesh.position.set(goal.x + goal.w / 2, H - (goal.y + goal.h / 2), 10);
@@ -373,8 +368,7 @@ const Renderer3D = (() => {
         const mat = new THREE.PointsMaterial({
             color,
             size: 4,
-            transparent: true,
-            opacity: 1
+            transparent: false, opacity: 1
         });
         const points = new THREE.Points(geom, mat);
         scene.add(points);
@@ -404,12 +398,9 @@ const Renderer3D = (() => {
 
     // ── Resize Handler ─────────────────────────────────────
     function resize() {
-        if (!renderer) return;
-        const w = window.innerWidth;
-        const h = window.innerHeight;
-        camera.aspect = w / h;
+        renderer.setSize(W, H, false);
+        camera.aspect = W / H;
         camera.updateProjectionMatrix();
-        renderer.setSize(w, h);
     }
 
     return { init, buildLevel, update, shake, burst, resize };

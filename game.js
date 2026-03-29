@@ -357,7 +357,8 @@ function updateBall() {
             
             if (currentGravity !== gz.type) {
                 tension = Math.min(TENSION_MAX, tension + 5);
-                window.AI?.generateMidLevelCommentary?.('Gravity anomaly detected.').then(txt => showMidLevelText(txt));
+                const txt = window.AI?.generateMidLevelCommentary?.('Gravity anomaly detected.');
+                if (txt) showMidLevelText(txt);
             }
             switchGravity(gz.type);
         }
@@ -421,11 +422,11 @@ function resolveCollision(bll, rect) {
 }
 
 // ── Narration ──────────────────────────────────────────────
-async function triggerNarration(event) {
+function triggerNarration(event) {
     if (narrationCooldown > 0) return;
     narrationCooldown = 180;
 
-    const narr = await window.AI.generateNarration(event);
+    const narr = window.AI.generateNarration(event);
     narrationText = narr;
     narrationTimer = 150;
     UI.showNarration(narr);
@@ -450,13 +451,14 @@ function killBall() {
     }
 
     triggerNarration('near_death');
-    window.AI?.generateMidLevelCommentary?.('life_lost').then(txt => UI.showNarration(txt));
+    const txt = window.AI?.generateMidLevelCommentary?.('life_lost');
+    if (txt) UI.showNarration(txt);
 
-    setTimeout(async () => {
+    setTimeout(() => {
         if (lives <= 0) {
             persistLeaderboardResult();
             state = GameState.GAME_OVER;
-            const epilogue = await window.AI?.generateEpilogue?.(currentLevel, score, deathCount) || 'Game Over';
+            const epilogue = window.AI?.generateEpilogue?.(currentLevel, score, deathCount) || 'Game Over';
             const epEl = document.getElementById('go-epilogue');
             if (epEl) epEl.innerHTML = epilogue.replace(/\n/g, '<br/>');
             UI.showGameOver();
@@ -478,7 +480,7 @@ function killBall() {
     state = GameState.DEATH;
 }
 
-async function completeLevel() {
+function completeLevel() {
     state = GameState.LEVEL_COMPLETE;
     tension = Math.max(0, tension - 15);
 
@@ -497,7 +499,7 @@ async function completeLevel() {
         Renderer3D.burst(goal.x + goal.w / 2, goal.y + goal.h / 2, 0x81c784, 20);
     }
 
-    const narr = await window.AI.generateNarration('level_complete');
+    const narr = window.AI.generateNarration('level_complete');
     narrationText = narr;
     narrationTimer = 180;
 
@@ -558,19 +560,16 @@ function gameLoop(timestamp) {
 }
 
 // ── Level Flow ─────────────────────────────────────────────
-async function startLevel(levelNum) {
-    state = GameState.LOADING;
-    UI.showLoading(levelNum);
+function startLevel(levelNum) {
+    // UI.showLoading(levelNum); // Loading screen removed for instant offline processing
 
     hintTier = 0;
     hintCooldown = HINT_COOLDOWN_FRAMES;
     levelStartFrame = gameFrameCount;
 
     const prefetched = window.AI?.getPrefetchedLevel?.();
-    const [story, level] = await Promise.all([
-        window.AI.generateStory(levelNum),
-        prefetched ? Promise.resolve(prefetched) : window.AI.generateLevel(levelNum)
-    ]);
+    const story = window.AI.generateStory(levelNum);
+    const level = prefetched ? prefetched : window.AI.generateLevel(levelNum);
 
     storyText = story;
     loadLevel(level);
@@ -595,15 +594,15 @@ async function startLevel(levelNum) {
     }, adaptiveMsg);
 }
 
-async function nextLevel() {
+function nextLevel() {
     currentLevel++;
     if (currentLevel > MAX_LEVEL) {
         persistLeaderboardResult();
         state = GameState.ENDING;
-        const ending = await window.AI.generateEnding();
+        const ending = window.AI.generateEnding();
         UI.showEnding(ending, score);
     } else {
-        await startLevel(currentLevel);
+        startLevel(currentLevel);
     }
 }
 
@@ -620,7 +619,7 @@ function restartGame() {
 }
 
 // ── Hint Request Handler ───────────────────────────────────
-async function requestHint() {
+function requestHint() {
     if (state !== GameState.PLAYING) return;
     if ((gameFrameCount - levelStartFrame) < HINT_COOLDOWN_FRAMES) {
         UI.showHint('Hints available after 15 seconds...');
@@ -632,7 +631,7 @@ async function requestHint() {
     }
     hintTier++;
     UI.showHint('💡 Thinking...');
-    const hint = await window.AI.generateHint(currentLevel, hintTier);
+    const hint = window.AI.generateHint(currentLevel, hintTier);
     UI.showHint(hint);
 }
 
@@ -670,12 +669,11 @@ function initGame() {
 
     // Initial Leaderboard seeding
     if (window.AI?.seedLeaderboard && (!window.PlayerStats?.getLeaderboard || window.PlayerStats.getLeaderboard().length === 0)) {
-        window.AI.seedLeaderboard().then(data => {
-            if (data && data.length) {
-                localStorage.setItem('bounce_leaderboard', JSON.stringify(data));
-                if (window.UI) window.UI.refreshLeaderboards();
-            }
-        });
+        const data = window.AI.seedLeaderboard();
+        if (data && data.length) {
+            localStorage.setItem('bounce_leaderboard', JSON.stringify(data));
+            if (window.UI) window.UI.refreshLeaderboards();
+        }
     } else {
         if (window.UI) window.UI.refreshLeaderboards();
     }
@@ -684,19 +682,18 @@ function initGame() {
     state = 'title'; // allow start button to work
     requestAnimationFrame(gameLoop);
 
-    document.getElementById('btn-start')?.addEventListener('click', async () => {
+    document.getElementById('btn-start')?.addEventListener('click', () => {
         if (state === GameState.LOADING) return;
         const input = document.getElementById('username-input');
         const pilotName = input ? (input.value.trim() || 'Unknown Pilot') : 'Unknown Pilot';
         if (window.PlayerStats && window.PlayerStats.setPlayerName) {
             window.PlayerStats.setPlayerName(pilotName);
         }
-        
-        state = GameState.LOADING;
+
         runStartedAt = Date.now();
-        UI.showLoading(1);
-        
-        await window.AI?.generateMissionArc?.(pilotName);
+        // UI.showLoading(1); // loading removed
+
+        window.AI?.generateMissionArc?.(pilotName);
         startLevel(1);
     });
 }

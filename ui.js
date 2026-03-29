@@ -137,6 +137,7 @@ const UI = (() => {
     }
 
     function typeWriter(element, text, speed) {
+        if (!text || typeof text !== 'string') text = "...";
         let i = 0;
         element.textContent = '';
         function type() {
