@@ -6,6 +6,11 @@
 // ── Canvas Setup ───────────────────────────────────────────
 const canvas = document.getElementById('gameCanvas');
 const W = 800, H = 580;
+const ctx = canvas ? canvas.getContext('2d') : null;
+if (canvas) {
+    canvas.width = W;
+    canvas.height = H;
+}
 
 // ── Game States ────────────────────────────────────────────
 const GameState = {
@@ -233,11 +238,6 @@ function loadLevel(data) {
     deathCount = 0;
     narrationCooldown = 0;
 
-    // Build 3D scene
-    if (window.Renderer3D) {
-        Renderer3D.buildLevel(platforms, obstacles, goal);
-    }
-    
     clearTimeout(gravityRevertTimer);
 }
 
@@ -443,13 +443,6 @@ function killBall() {
     // Track for adaptive difficulty
     if (window.PlayerStats) window.PlayerStats.recordDeath();
 
-    // 3D effects
-    if (window.Renderer3D) {
-        Renderer3D.shake(3);
-        Renderer3D.burst(ball.x, ball.y, 0xff5252, 25);
-        Renderer3D.burst(ball.x, ball.y, 0xffab40, 12);
-    }
-
     triggerNarration('near_death');
     const txt = window.AI?.generateMidLevelCommentary?.('life_lost');
     if (txt) UI.showNarration(txt);
@@ -493,12 +486,6 @@ function completeLevel() {
         window.PlayerStats.setHighScore(score);
     }
 
-    // 3D victory effects
-    if (goal && window.Renderer3D) {
-        Renderer3D.burst(goal.x + goal.w / 2, goal.y + goal.h / 2, 0x4caf50, 30);
-        Renderer3D.burst(goal.x + goal.w / 2, goal.y + goal.h / 2, 0x81c784, 20);
-    }
-
     const narr = window.AI.generateNarration('level_complete');
     narrationText = narr;
     narrationTimer = 180;
@@ -525,6 +512,43 @@ function updateGravityShifts() {
             switchGravity(pick);
             // Will auto-revert thanks to the logic in switchGravity()
         }
+
+        function drawGame2D() {
+            if (!ctx) return;
+
+            const bg = '#070b1e';
+            const platformColor = '#19c6a8';
+            const movingPlatformColor = '#36d8bd';
+            const obstacleColor = '#ff6b6b';
+            const goalColor = '#29d3ff';
+            const ballColor = '#f2f7ff';
+
+            ctx.clearRect(0, 0, W, H);
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, W, H);
+
+            for (const p of platforms) {
+                ctx.fillStyle = p.type === 'moving' ? movingPlatformColor : platformColor;
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+            }
+
+            for (const o of obstacles) {
+                ctx.fillStyle = obstacleColor;
+                ctx.fillRect(o.x, o.y, o.w, o.h);
+            }
+
+            if (goal) {
+                ctx.fillStyle = goalColor;
+                ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
+            }
+
+            if (ball.alive) {
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                ctx.fillStyle = ballColor;
+                ctx.fill();
+            }
+        }
     }
 }
 
@@ -546,11 +570,9 @@ function gameLoop(timestamp) {
         accumulator -= FIXED_DT;
     }
 
-    // 3D Render
+    drawGame2D();
+
     if (state === GameState.PLAYING || state === GameState.DEATH) {
-        if (window.Renderer3D) {
-            Renderer3D.update(ball, platforms, obstacles, currentGravity, tension);
-        }
         if (state === GameState.PLAYING) {
             UI.updateHUD(lives, score, currentLevel, MAX_LEVEL, tension);
         }
@@ -587,10 +609,6 @@ function startLevel(levelNum) {
     UI.showStory(storyText, level.name || `Level ${levelNum}`, level.difficulty, () => {
         state = GameState.PLAYING;
         UI.showGameplay();
-        // Initial 3D render
-        if (window.Renderer3D) {
-            Renderer3D.update(ball, platforms, obstacles, currentGravity, tension);
-        }
     }, adaptiveMsg);
 }
 
@@ -656,13 +674,6 @@ function initGame() {
     if (storedName && storedName !== 'Pilot') {
         const input = document.getElementById('username-input');
         if (input) input.value = storedName;
-    }
-
-    // Init Three.js renderer
-    if (window.Renderer3D) {
-        Renderer3D.init(canvas);
-        window.addEventListener('resize', () => Renderer3D.resize());
-        Renderer3D.resize();
     }
 
     setupTouchControls();
