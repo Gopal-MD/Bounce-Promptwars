@@ -6,7 +6,7 @@
 // ── Canvas Setup ───────────────────────────────────────────
 const canvas = document.getElementById('gameCanvas');
 const W = 800, H = 580;
-const ctx = canvas ? canvas.getContext('2d') : null;
+const ctx = null; // Removed 2d context initialization to allow WebGL
 if (canvas) {
     canvas.width = W;
     canvas.height = H;
@@ -239,6 +239,9 @@ function loadLevel(data) {
     narrationCooldown = 0;
 
     clearTimeout(gravityRevertTimer);
+    if (window.Renderer3D) {
+        window.Renderer3D.buildLevel(platforms, obstacles, goal);
+    }
 }
 
 // ── Update Moving Platforms/Obstacles ───────────────────────
@@ -358,7 +361,7 @@ function updateBall() {
             if (currentGravity !== gz.type) {
                 tension = Math.min(TENSION_MAX, tension + 5);
                 const txt = window.AI?.generateMidLevelCommentary?.('Gravity anomaly detected.');
-                if (txt) showMidLevelText(txt);
+                if (txt) UI.showNarration(txt);
             }
             switchGravity(gz.type);
         }
@@ -512,43 +515,43 @@ function updateGravityShifts() {
             switchGravity(pick);
             // Will auto-revert thanks to the logic in switchGravity()
         }
+    }
+}
 
-        function drawGame2D() {
-            if (!ctx) return;
+function drawGame2D() {
+    if (!ctx) return;
 
-            const bg = '#070b1e';
-            const platformColor = '#19c6a8';
-            const movingPlatformColor = '#36d8bd';
-            const obstacleColor = '#ff6b6b';
-            const goalColor = '#29d3ff';
-            const ballColor = '#f2f7ff';
+    const bg = '#070b1e';
+    const platformColor = '#19c6a8';
+    const movingPlatformColor = '#36d8bd';
+    const obstacleColor = '#ff6b6b';
+    const goalColor = '#29d3ff';
+    const ballColor = '#f2f7ff';
 
-            ctx.clearRect(0, 0, W, H);
-            ctx.fillStyle = bg;
-            ctx.fillRect(0, 0, W, H);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
 
-            for (const p of platforms) {
-                ctx.fillStyle = p.type === 'moving' ? movingPlatformColor : platformColor;
-                ctx.fillRect(p.x, p.y, p.w, p.h);
-            }
+    for (const p of platforms) {
+        ctx.fillStyle = p.type === 'moving' ? movingPlatformColor : platformColor;
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+    }
 
-            for (const o of obstacles) {
-                ctx.fillStyle = obstacleColor;
-                ctx.fillRect(o.x, o.y, o.w, o.h);
-            }
+    for (const o of obstacles) {
+        ctx.fillStyle = obstacleColor;
+        ctx.fillRect(o.x, o.y, o.w, o.h);
+    }
 
-            if (goal) {
-                ctx.fillStyle = goalColor;
-                ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
-            }
+    if (goal) {
+        ctx.fillStyle = goalColor;
+        ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
+    }
 
-            if (ball.alive) {
-                ctx.beginPath();
-                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-                ctx.fillStyle = ballColor;
-                ctx.fill();
-            }
-        }
+    if (ball.alive) {
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = ballColor;
+        ctx.fill();
     }
 }
 
@@ -570,7 +573,11 @@ function gameLoop(timestamp) {
         accumulator -= FIXED_DT;
     }
 
-    drawGame2D();
+    if (window.Renderer3D) {
+        window.Renderer3D.update(ball, platforms, obstacles, currentGravity, tension);
+    } else {
+        drawGame2D();
+    }
 
     if (state === GameState.PLAYING || state === GameState.DEATH) {
         if (state === GameState.PLAYING) {
@@ -677,6 +684,10 @@ function initGame() {
     }
 
     setupTouchControls();
+
+    if (window.Renderer3D && canvas) {
+        window.Renderer3D.init(canvas);
+    }
 
     // Initial Leaderboard seeding
     if (window.AI?.seedLeaderboard && (!window.PlayerStats?.getLeaderboard || window.PlayerStats.getLeaderboard().length === 0)) {
